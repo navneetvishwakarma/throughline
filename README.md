@@ -12,9 +12,18 @@
 
 ```bash
 git clone https://github.com/navneetvishwakarma/throughline.git
+cd throughline
+
+# Windows
+./install.ps1
+
+# macOS / Linux
+chmod +x install.sh && ./install.sh
 ```
 
-Then in Claude Code: `Settings → Plugins → Add local plugin` and point it at the cloned directory.
+Then restart Claude Code. The plugin is registered as a directory junction / symlink, so any edits to the repo are immediately live — no re-install needed.
+
+To uninstall: `./install.ps1 -Uninstall` or `./install.sh --uninstall`.
 
 **Via npm (once published):**
 
