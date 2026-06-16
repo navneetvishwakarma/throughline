@@ -1,0 +1,8 @@
+{
+  "schema": 2,
+  "project": "<PROJECT_NAME>",
+  "prd": "docs/product/06-prd.md",
+  "phases": [],
+  "epics": [],
+  "stories": []
+}

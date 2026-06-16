@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "backlog.schema.json",
+  "title": "Throughline Backlog Contract (nested: epics group stories)",
+  "description": "Single source of truth for work. Epics are vertically-sliced shippable increments grouping user stories. Stories are the LEAF records that carry status; epic progress is DERIVED, never stored. The backlog IS the tracker; an external tracker is an optional mirror.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project", "prd", "epics", "stories"],
+  "properties": {
+    "schema": { "const": 2, "description": "Schema version. v2 = nested epics+stories." },
+    "project": { "type": "string", "minLength": 1 },
+    "tagline": { "type": "string" },
+    "repo": { "type": "string", "description": "Repo base URL for deep-linking issues (only when a remote tracker is used)." },
+    "tracker": { "enum": ["local", "github", "gitlab", "linear", "jira"], "default": "local", "description": "Optional issue-tracker mirror. Default 'local' = offline, no account: stories are the work items, status set by the skills, dashboard links to PRD/backlog. Other values mirror via the sync adapter." },
+    "health": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional schedule verdict shown on the dashboard (behind/ahead needs a schedule, so it is set, not derived).",
+      "properties": {
+        "overall": { "enum": ["behind", "on_track", "ahead"] },
+        "headline": { "type": "string" },
+        "action": { "type": "string" }
+      }
+    },
+    "prd": { "type": "string", "description": "Path to the PRD that REQ ids resolve against." },
+    "phases": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "order": { "type": "integer" } } }
+    },
+    "epics": { "type": "array", "items": { "$ref": "#/definitions/epic" } },
+    "stories": { "type": "array", "items": { "$ref": "#/definitions/story" } }
+  },
+  "definitions": {
+    "epic": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "order"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^E-[0-9]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "type": "string" },
+        "prd_ref": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] },
+        "order": { "type": "integer" },
+        "estimate": { "type": "number", "description": "Optional size estimate (days or points)." },
+        "target_date": { "type": "string", "description": "Optional target completion date YYYY-MM-DD; drives overdue detection." },
+        "release": { "type": "string", "description": "Product release (v1/v2). Orthogonal to phase." },
+        "vertical": { "type": "boolean", "default": true, "description": "false marks a foundational/enabler epic." },
+        "gh_issue": { "type": ["integer", "null"], "description": "Tracker issue number; only with a remote tracker." },
+        "acceptance": { "type": "string" }
+      }
+    },
+    "story": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "epic", "status", "order"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" },
+        "title": { "type": "string", "minLength": 1 },
+        "epic": { "type": "string", "pattern": "^E-[0-9]+$", "description": "REQUIRED. The epic this story belongs to." },
+        "prd_ref": { "type": "string" },
+        "gh_issue": { "type": ["integer", "null"] },
+        "status": { "enum": ["notstarted", "in_progress", "blocked", "done"], "description": "Owned by the status adapter (sync-status with a tracker, or the skills in local mode). Never hand-edit casually." },
+        "blocked_by": { "type": "array", "items": { "type": "string" } },
+        "order": { "type": "integer" },
+        "estimate": { "type": "number" },
+        "acceptance": { "type": "string" },
+        "verify": {
+          "type": "object", "additionalProperties": false,
+          "properties": { "ci": { "enum": ["pass", "fail", "pending", "none"] }, "coverage": { "type": "number", "minimum": 0, "maximum": 1 }, "commit": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
