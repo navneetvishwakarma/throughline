@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # install.sh — Install throughline as a local Claude Code plugin (macOS / Linux)
 #
-# Creates a symlink from the Claude plugin cache to this repo so
-# edits are immediately live without re-installing.
+# Copies this repo into the Claude plugin cache. Edits to source are not live
+# until you re-run this script.
 #
 # Usage:
-#   ./install.sh             # install
+#   ./install.sh             # install / reinstall
 #   ./install.sh --uninstall # remove
 
 set -euo pipefail
@@ -24,7 +24,9 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -rf "$CACHE_DIR"
     node -e "
       const fs = require('fs');
+      if (!fs.existsSync('$REGISTRY')) process.exit(0);
       const r = JSON.parse(fs.readFileSync('$REGISTRY', 'utf8'));
+      r.plugins ||= {};
       delete r.plugins['$KEY'];
       fs.writeFileSync('$REGISTRY', JSON.stringify(r, null, 2) + '\n');
     "
@@ -32,13 +34,21 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     exit 0
 fi
 
-mkdir -p "$(dirname "$CACHE_DIR")"
 rm -rf "$CACHE_DIR"
-ln -s "$SCRIPT_DIR" "$CACHE_DIR"
+mkdir -p "$CACHE_DIR"
+cp -R "$SCRIPT_DIR/." "$CACHE_DIR/"
+rm -rf "$CACHE_DIR/.git"
+if [[ ! -f "$CACHE_DIR/.claude-plugin/plugin.json" ]]; then
+    echo "ERROR: Copy failed — plugin manifest not found in cache." >&2
+    exit 1
+fi
 
 node -e "
   const fs = require('fs');
-  const r = JSON.parse(fs.readFileSync('$REGISTRY', 'utf8'));
+  const path = '$REGISTRY';
+  fs.mkdirSync(require('path').dirname(path), { recursive: true });
+  const r = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, 'utf8')) : { plugins: {} };
+  r.plugins ||= {};
   r.plugins['$KEY'] = [{
     scope: 'user',
     installPath: '$CACHE_DIR',
@@ -54,6 +64,6 @@ echo ""
 echo "throughline $VERSION installed."
 echo "  Source : $SCRIPT_DIR"
 echo "  Cache  : $CACHE_DIR"
-echo "  Mode   : symlink (edits are live)"
+echo "  Mode   : copy (re-run to pick up source changes)"
 echo ""
 echo "Restart Claude Code to activate the plugin."

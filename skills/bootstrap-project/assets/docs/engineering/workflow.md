@@ -15,8 +15,8 @@ everything downstream is data through scripts.
 ## Status enum (the only legal values)
 
 `notstarted` → `in_progress` → `done`, with `blocked` as an override when a
-dependency is unmet. **`status` is owned by `sync-status.mjs` and is never
-hand-edited.**
+dependency is unmet. **`status` is owned by the local/GitHub status adapter and
+is never hand-edited casually.**
 
 ## Field ownership (prevents clobbering)
 
@@ -28,7 +28,7 @@ dashboard and never stored.
 |-------|-------|-------|
 | `epics[]` scope; story `id`, `title`, `epic`, `order`, `prd_ref`, `acceptance`, `blocked_by` | human + define-backlog | The plan. |
 | `epics[].gh_issue`, `stories[].gh_issue` | define-epic / ship | Written back after the GH issue is created. |
-| story `status`, `verify` | `sync-status.mjs` | Mirrored from GitHub + CI. Read-only to everyone else. |
+| story `status`, `verify` | status adapter + implement/ship evidence | Local mode is written by workflow skills; GitHub mode is mirrored from issue state. |
 | epic status / progress | derived | Computed by the dashboard from child stories. Never stored. |
 
 ## Definition of Ready (a story may be picked up only if)
@@ -37,10 +37,11 @@ dashboard and never stored.
 - `prd_ref` points at a real requirement ID (e.g. `REQ-12`).
 - `acceptance` is non-empty and testable.
 - All `blocked_by` dependencies are `done`.
+- The relevant human gate is approved in `.throughline/gates.json`.
 
 ## Definition of Done (a story is `done` only when)
 
-- Its GH issue is CLOSED.
+- In GitHub mode, its issue is CLOSED. In local mode, `ship-epic` marks it done.
 - Acceptance criteria met; tests for the change pass (`verify.ci: pass`).
 - The epic ledger (`.claude/epic-<n>/ledger.md`) records files, tests, commit.
 
@@ -54,6 +55,7 @@ dashboard and never stored.
 
 ```
 node scripts/validate.mjs        # gate: fails loud on a bad contract
-node scripts/sync-status.mjs     # mirror GH issue state into the contract
+node scripts/gate.mjs list       # show human gate state
+node scripts/sync-status.mjs     # sync local/GitHub status into the contract
 node scripts/build-dashboard.mjs # render PROGRESS_DASHBOARD.html
 ```

@@ -27,7 +27,7 @@ Follow the README *Context & token protocol*. Read only the PRD `## Requirements
 ## Fixes applied
 - Seed a **Foundation enabler epic** (`order: 0`, `vertical:false`) first.
 - Optional `estimate` + `target_date` per epic → objective schedule health.
-- Honour the `tracker` field; write `gh_issue` regardless of tracker.
+- Honour the `tracker` field; leave `gh_issue` null in local mode and let define-epic write it in GitHub mode.
 
 ## Reuse
 - `product-management:sprint-planning` (sequencing/capacity), `product-management:roadmap-update` (Now/Next/Later framing).

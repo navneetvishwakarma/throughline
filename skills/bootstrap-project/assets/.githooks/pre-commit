@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -eu
+
+node scripts/validate.mjs
+
+if command -v codegraph >/dev/null 2>&1 && [ -d .codegraph ]; then
+  codegraph index >/dev/null 2>&1 || true
+fi

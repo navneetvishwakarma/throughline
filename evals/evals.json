@@ -1,0 +1,60 @@
+{
+  "skill_name": "throughline",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a rough idea for a B2B SaaS that turns support tickets into product insights. Run Throughline from idea sharpening through the first approved backlog, but keep the riskiest assumption explicit and do not proceed past any human gate without approval.",
+      "expected_output": "A gated workflow run that produces a crisp brief, records the validate-or-accept decision, refuses downstream work until approval, and produces a traceable backlog only after PRD approval.",
+      "files": [],
+      "assertions": [
+        { "text": "Produces or requests the five required brief fields: problem, target user, core bet, scope boundary, riskiest assumption." },
+        { "text": "Requires an explicit G1 decision before proceeding." },
+        { "text": "Does not seed backlog stories before PRD approval." }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Bootstrap an existing empty git repo for Throughline in local mode. I do not want GitHub, Linear, Jira, or any network dependency. Verify the scaffold after bootstrapping.",
+      "expected_output": "A local-only scaffold with scripts, docs, gate state support, pre-commit/CI assets where applicable, and a validation run that passes without external accounts.",
+      "files": [],
+      "assertions": [
+        { "text": "Uses tracker local and does not attempt remote issue creation." },
+        { "text": "Runs the deterministic validator after scaffolding." },
+        { "text": "Mentions gate state commands or `.throughline/gates.json`." }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Given an approved PRD with REQ-01 through REQ-05, create the first backlog. Include a foundation epic, vertical feature epics, dependencies, estimates, and target dates. Make it production-grade and machine-valid.",
+      "expected_output": "A backlog.json contract with schema 2, local or github tracker only, required `prd_ref`, `acceptance`, and `blocked_by` on every story, and no cyclic dependencies.",
+      "files": [],
+      "assertions": [
+        { "text": "Every story includes `prd_ref`, `acceptance`, `blocked_by`, `status`, and `order`." },
+        { "text": "Foundation work is marked as an enabler epic with `vertical: false`." },
+        { "text": "Runs `node scripts/validate.mjs` and reports the result." }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Define the next epic from a valid backlog, then prepare implementation. The user has not approved the epic plan yet. Show how Throughline prevents coding from starting.",
+      "expected_output": "An epic plan and test plan are produced, but implementation is blocked until G6 is approved and persisted through the gate script.",
+      "files": [],
+      "assertions": [
+        { "text": "Produces per-story specs and an epic test plan." },
+        { "text": "Requires `node scripts/gate.mjs approve G6` or equivalent persisted approval before implementation." },
+        { "text": "Does not start code changes while G6 is missing." }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "A project sets tracker to linear in backlog.json and asks Throughline to sync status and ship the epic. Handle this predictably.",
+      "expected_output": "The workflow refuses unsupported tracker automation, explains that only local and github are supported today, and does not pretend Linear sync exists.",
+      "files": [],
+      "assertions": [
+        { "text": "Fails loudly or stops on unsupported tracker `linear`." },
+        { "text": "Names supported trackers as local and github." },
+        { "text": "Does not create fake issue mappings or silently continue." }
+      ]
+    }
+  ]
+}

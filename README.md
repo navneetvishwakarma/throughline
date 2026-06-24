@@ -21,9 +21,18 @@ cd throughline
 chmod +x install.sh && ./install.sh
 ```
 
-Then restart Claude Code. The plugin is registered as a directory junction / symlink, so any edits to the repo are immediately live — no re-install needed.
+Then restart Claude Code.
+
+To update: `git pull` then re-run the install script and restart Claude Code.
 
 To uninstall: `./install.ps1 -Uninstall` or `./install.sh --uninstall`.
+
+To verify a source checkout:
+
+```bash
+npm test
+npm run doctor
+```
 
 **Via npm (once published):**
 
@@ -263,7 +272,7 @@ This is the core build cycle. It repeats for every epic, lowest-order unblocked 
 
 **`ship-epic`** lands the completed epic:
 
-*With a remote tracker (GitHub/GitLab/Linear/Jira):*
+*With a remote tracker (GitHub):*
 - Validates every story's acceptance criteria against implementation evidence
 - Runs a mandatory security-review for any change touching auth, OAuth, or PII — this can block the merge
 - Opens the PR, waits for CI, asks you to approve and merge
@@ -327,7 +336,7 @@ Everything between gates runs unattended and stays in sync via the validated con
 
 By default (`tracker: local`) the plugin runs entirely offline — no GitHub account, no API keys, no network. The `backlog.json` contract is the tracker: stories are the work items, skills set their status, and the dashboard links to the PRD and backlog docs.
 
-To mirror work to issues, set `tracker` in `backlog.json` to `github`, `gitlab`, `linear`, or `jira`. Same skills, same gates, same dashboard — the tracker only changes whether work is *also* mirrored to issues.
+To mirror work to issues, set `tracker` in `backlog.json` to `github`. Same skills, same gates, same dashboard — GitHub only changes whether work is *also* mirrored to issues. GitLab, Linear, and Jira are intentionally not advertised until their adapters exist.
 
 ---
 
@@ -341,13 +350,21 @@ node scripts/build-dashboard.mjs
 
 Renders `PROGRESS_DASHBOARD.html` — a zero-token, zero-dependency view of your project's schedule health, blocked items, epic progress, and per-release rollup. Pure function of the contract; open it in any browser.
 
+Gate state is persisted in `.throughline/gates.json`:
+
+```bash
+node scripts/gate.mjs list
+node scripts/gate.mjs check G6
+node scripts/gate.mjs approve G6 --note "epic plan approved"
+```
+
 ---
 
 ## Requirements
 
 - Node.js 18+
 - A coding agent that reads `AGENTS.md` (Claude Code, Cursor, Codex, Gemini, OpenCode)
-- Optional: a GitHub/GitLab/Linear/Jira account for issue mirroring
+- Optional: a GitHub account for issue mirroring
 - Optional: [codegraph](https://codegraph.dev) for faster code lookups in implement-epic
 
 ---

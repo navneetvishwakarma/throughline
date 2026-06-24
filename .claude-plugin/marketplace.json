@@ -1,0 +1,19 @@
+{
+  "name": "local",
+  "owner": {
+    "name": "Navneet"
+  },
+  "metadata": {
+    "description": "Local plugins installed from the filesystem",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "throughline",
+      "source": "./",
+      "description": "Solo dev superpowers — a spec-driven, gated workflow that lets one developer ship like a team.",
+      "version": "0.1.0",
+      "strict": false
+    }
+  ]
+}

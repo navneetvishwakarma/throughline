@@ -223,8 +223,9 @@ never a dependency:
 - **`tracker: local` (default)** — no account, no network. Stories are the work items;
   `define-epic` skips issue creation; `implement-epic`/`ship-epic` set status locally;
   G7 is a local `git diff` review and merge; the dashboard links to the PRD/backlog.
-- **`tracker: github|gitlab|linear|jira`** — opt-in. `define-epic` mirrors stories to issues,
+- **`tracker: github`** — opt-in. `define-epic` mirrors stories to issues,
   `sync-status` mirrors their state back, and the dashboard deep-links to them.
+  GitLab, Linear, and Jira require adapters before they can be enabled.
 
 Same skills, same gates, same dashboard — the tracker only changes whether work is *also*
 mirrored to issues. The plugin works the same for a developer with no GitHub account.
@@ -235,7 +236,7 @@ This version closes the gaps from `process-review.md`:
 1. **Spike step** (`validate-assumption`, G1.5) validates the riskiest bet *before* PRD/architecture, with proceed/pivot/kill.
 2. **Mid-flight amend loop** — implement-epic can flag a wrong slice → reconcile backlog → re-gate (G6).
 3. **Objective schedule health** — optional `estimate` + `target_date` per epic; dashboard flags overdue.
-4. **Tracker abstraction** — `tracker` field (github/gitlab/linear/jira); sync uses a per-tracker adapter.
+4. **Tracker abstraction** — `tracker` field (`local|github` today); sync uses a per-tracker adapter.
 5. **Hard security gate** at G4 (architecture) and G7 (ship) for auth/OAuth/PII.
 6. **Testing matured** — test plan at define-epic; QA pass (incl. `MANUAL-TESTS.md`) at release.
 7. **codegraph freshness** — re-index on the pre-commit hook + CI.

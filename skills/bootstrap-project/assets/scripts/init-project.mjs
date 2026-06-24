@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Phase A bootstrap — deterministic, no deps. Idempotent (never overwrites). Run at the project root.
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 const root = process.cwd();
 const project = process.argv[2] || '<PROJECT_NAME>';
@@ -41,6 +41,17 @@ const manualPtr = '# ' + project + ' — agent operating manual\n\nCanonical man
 place('CLAUDE.md', manualPtr);
 place('GEMINI.md', manualPtr);
 mkdirSync(join(root, 'docs/design'), { recursive: true });
+if (existsSync(join(root, '.git')) && existsSync(join(root, '.githooks/pre-commit'))) {
+  const hook = join(root, '.git/hooks/pre-commit');
+  if (!existsSync(hook)) {
+    mkdirSync(dirname(hook), { recursive: true });
+    copyFileSync(join(root, '.githooks/pre-commit'), hook);
+    try { chmodSync(hook, 0o755); } catch {}
+    created.push('.git/hooks/pre-commit');
+  } else {
+    skipped.push('.git/hooks/pre-commit');
+  }
+}
 console.log('OK Bootstrapped "' + project + '"');
 console.log('  created: ' + created.length);
 created.forEach((f) => console.log('    + ' + f));

@@ -1,11 +1,11 @@
 #!/usr/bin/env pwsh
 # install.ps1 — Install throughline as a local Claude Code plugin (Windows)
 #
-# Creates a directory junction from the Claude plugin cache to this repo so
-# edits are immediately live without re-installing.
+# Copies this repo into the Claude plugin cache. Edits to source are not live
+# until you re-run this script.
 #
 # Usage:
-#   ./install.ps1            # install
+#   ./install.ps1            # install / reinstall
 #   ./install.ps1 -Uninstall # remove
 
 param([switch]$Uninstall)
@@ -40,15 +40,25 @@ New-Item -ItemType Directory -Force -Path (Split-Path $cacheDir) | Out-Null
 # Remove stale junction or directory
 if (Test-Path $cacheDir) { Remove-Item $cacheDir -Recurse -Force }
 
-# Directory junction — no admin required on Windows
-$null = cmd /c mklink /J `"$cacheDir`" `"$source`" 2>&1
-if (-not (Test-Path $cacheDir)) {
-    Write-Error "Failed to create directory junction. Try running as Administrator."
+# Copy source into cache then strip .git
+New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+Copy-Item -Path "$source\*" -Destination $cacheDir -Recurse
+if (Test-Path "$cacheDir\.git") { Remove-Item "$cacheDir\.git" -Recurse -Force }
+if (-not (Test-Path "$cacheDir\.claude-plugin\plugin.json")) {
+    Write-Error "Copy failed — plugin manifest not found in cache."
     exit 1
 }
 
 # Update installed_plugins.json
-$reg = Get-Content $registryPath -Raw | ConvertFrom-Json
+if (Test-Path $registryPath) {
+    $reg = Get-Content $registryPath -Raw | ConvertFrom-Json
+    if (-not $reg.plugins) {
+        $reg | Add-Member -NotePropertyName plugins -NotePropertyValue ([pscustomobject]@{})
+    }
+} else {
+    New-Item -ItemType Directory -Force -Path (Split-Path $registryPath) | Out-Null
+    $reg = [pscustomobject]@{ plugins = [pscustomobject]@{} }
+}
 $entry = [pscustomobject]@{
     scope        = "user"
     installPath  = $cacheDir
@@ -68,6 +78,6 @@ Write-Host ""
 Write-Host "throughline $version installed."
 Write-Host "  Source : $source"
 Write-Host "  Cache  : $cacheDir"
-Write-Host "  Mode   : directory junction (edits are live)"
+Write-Host "  Mode   : copy (re-run to pick up source changes)"
 Write-Host ""
 Write-Host "Restart Claude Code to activate the plugin."

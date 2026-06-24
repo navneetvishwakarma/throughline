@@ -7,7 +7,12 @@ const backlogPath = join(root, 'docs/engineering/backlog.json');
 const claudeDir = join(root, '.claude');
 const data = JSON.parse(readFileSync(backlogPath, 'utf8'));
 const tracker = data.tracker || 'local';
-// GitHub adapter: scan .claude/ship-*/issue-*.json. Add gitlab/linear/jira branches here.
+const supportedTrackers = ['local', 'github'];
+if (!supportedTrackers.includes(tracker)) {
+  console.error('Unsupported tracker ' + JSON.stringify(tracker) + '. Supported trackers: ' + supportedTrackers.join(', '));
+  process.exit(1);
+}
+// GitHub adapter: scan .claude/ship-*/issue-*.json.
 const ghState = new Map();
 if (tracker === 'github' && existsSync(claudeDir)) {
   for (const dir of readdirSync(claudeDir)) {

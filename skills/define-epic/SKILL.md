@@ -8,7 +8,7 @@ description: Use when the backlog is approved and the next epic needs to be expa
 Act as a top-0.1% FAANG principal architect. Decompose one epic into airtight per-story specs. Consult PM (scope) and Developer (implementability) as supporting lenses.
 
 ## Gate-in
-`docs/engineering/backlog.json` is valid (`node scripts/validate.mjs` passes); at least one epic's stories all have `blocked_by` deps satisfied (all `done`). If none is unblocked: report and stop.
+`docs/engineering/backlog.json` is valid (`node scripts/validate.mjs` passes); G5 is approved (`node scripts/gate.mjs check G5` when available); at least one epic's stories all have `blocked_by` deps satisfied (all `done`). If none is unblocked: report and stop.
 
 ## Context protocol
 Load `CLAUDE.md` + only the chosen epic's stories + their `prd_ref` requirement from the PRD + the ADR linked to the epic. Never load whole docs. If a codegraph index is present (`.codegraph/`), query it to map the epic to affected symbols/files and read only those spans — never scan the source tree.
@@ -52,7 +52,7 @@ Initialize `.claude/epic-<N>/ledger.md`:
 
 **If `tracker: local` (the default):** skip all issue creation. Stories are the work items; `gh_issue` stays `null`; specs live in `.claude/epic-<N>/`. No account or network needed.
 
-**If `tracker: github|gitlab|linear|jira`:**
+**If `tracker: github`:**
 
 Create the GitHub epic parent issue:
 
@@ -77,12 +77,14 @@ gh api --method POST /repos/:owner/:repo/issues/<epic-number>/sub_issues \
 
 Append a header to `docs/MANUAL-TESTS.md` for this epic and its sub-issues (create the file if absent).
 
+**If `tracker` is anything else:** stop. Add a tracker adapter before claiming support.
+
 **Write back:** After issue creation, write `epic.gh_issue` (parent number) and each `story.gh_issue` (sub-issue number) into `backlog.json`. Do **not** touch `status`.
 
 Run `node scripts/validate.mjs` after any write-back; fix until it passes.
 
 ## Gate (G6)
-Present the epic plan, per-story specs, and test plan. Ask the user to approve **before any code is written**. On approval: the epic is ready for `implement-epic`.
+Present the epic plan, per-story specs, and test plan. Ask the user to approve **before any code is written**. On approval run `node scripts/gate.mjs approve G6 --note "epic plan approved"` when available. Then the epic is ready for `implement-epic`.
 
 ## Done when
 `.claude/epic-<N>/` exists with all story specs, test-plan.md, and ledger skeleton; `gh_issue` written back (tracker mode only); `validate.mjs` passes; G6 approved.
