@@ -17,12 +17,12 @@ Audit via section reads and the codegraph query, not whole-tree reads. **If no c
 
 1. **Audit** — detect and report what's already present:
    - Docs tier: product docs, PRD, architecture, design, backlog files.
-   - Tracker: `.claude/ship-*/`, `.claude/epic-*/`, GitHub issues, roadmap/progress files.
+   - Tracker: `.throughline/ship-*/`, `.throughline/epic-*/`, GitHub issues, roadmap/progress files.
    - CI, pre-commit hooks, codegraph index.
    - Security surfaces: auth/PII/secrets already in the codebase (flag for the security lens).
    Print a one-page audit: ✓ present / ✗ missing per item.
 
-2. **Rails** — run `node scripts/init-project.mjs "<name>"` (non-destructive: never overwrites existing files). Add `CLAUDE.md` (if absent), `AGENTS.md`, pre-commit hook (`node scripts/validate.mjs`), and CI config if a CI connector is present. Build or refresh the codegraph index.
+2. **Rails** — run `node scripts/init-project.mjs "<name>"` (non-destructive: never overwrites existing files). Add `AGENTS.md` plus platform pointer files, pre-commit hook (`node scripts/validate.mjs`), and CI config if a CI connector is present. Build or refresh the codegraph index.
 
 3. **Contract** — reconcile existing work into `docs/engineering/backlog.json`:
    - Existing tracker items (GH epic issues + sub-issues, roadmap slices) → epics + stories with `gh_issue` where relevant.
@@ -39,7 +39,7 @@ Audit via section reads and the codegraph query, not whole-tree reads. **If no c
 Supporting lenses: PM (map existing work to the PRD's REQ-xx where a PRD exists), Security (flag existing PII/auth surfaces found during audit).
 
 ## Outputs
-Rails + `CLAUDE.md` + a populated, validated `backlog.json` + a working `PROGRESS_DASHBOARD.html`; old trackers archived.
+Rails + `AGENTS.md` + a populated, validated `backlog.json` + a working `PROGRESS_DASHBOARD.html`; old trackers archived.
 
 ## Automated gate
 `node scripts/validate.mjs` exits 0; every existing tracked item is represented exactly once in `backlog.json`; `build-dashboard.mjs` renders without error.

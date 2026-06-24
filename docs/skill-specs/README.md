@@ -54,7 +54,7 @@ The goal: never read the same content twice across skills, and never read a whol
 file/tree when a slice or a graph query will do.
 
 1. **Load order, cheapest first; stop as soon as you have enough.**
-   `CLAUDE.md` (the index) → the *specific slice* of `backlog.json` you need (one epic +
+   `AGENTS.md` (the index) → the *specific slice* of `backlog.json` you need (one epic +
    its stories, never the whole array) → codegraph query for any code → targeted reads of
    only the spans returned. Do not pre-load docs "just in case".
 2. **codegraph-first for all code.** **If a codegraph index is present in the repo

@@ -28,14 +28,14 @@ Follow the README *Context & token protocol*. Work from the sub-issue spec + led
 
 ## Required changes (delta)
 1. **Verification evidence into the contract:** after a story's tests pass in CI, write `story.verify = { ci, coverage, commit }` in `backlog.json`. Do **not** set `status` (sync owns it — status flips when the GH issue closes at ship).
-2. Update `.claude/epic-<n>/ledger.md` per story (files, tests, commit, risks) as today.
+2. Update `.throughline/epic-<n>/ledger.md` per story (files, tests, commit, risks) as today.
 3. Run code-review + security-review self-passes before opening/marking a story ready.
 4. Keep each change scoped to one story; no cross-story drift.
 5. **Mid-flight amend (critical):** if building reveals the slice/acceptance/dependency is wrong, **stop** — do not force the code to fit a wrong spec. Flag it, run `define-backlog` in reconcile mode to amend the affected story/epic, and re-clear **G6** before resuming. Never let code silently diverge from the contract.
 6. **Local mode (no tracker):** the skill is the status adapter — set the story `in_progress` on start and write `verify` from local test runs; leave `done` to ship-epic. (With a tracker, `sync-status` owns status instead.)
 
 ## Inputs / Outputs
-- Reads: `.claude/epic-<n>/*`, codebase. Writes: code + tests; ledger; `story.verify` fields.
+- Reads: `.throughline/epic-<n>/*`, codebase. Writes: code + tests; ledger; `story.verify` fields.
 
 ## Automated gate
 - Tests pass, lint clean, code-review + security-review self-pass, `verify.ci: pass` recorded.

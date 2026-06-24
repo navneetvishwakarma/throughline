@@ -13,7 +13,7 @@ deploy, refresh the dashboard, and kick off the measure-and-learn loop. Trigger 
 "cut a release", "release v1", "ship to users", "tag and deploy". Runs per release wave.
 
 ## Context (token protocol)
-Follow the README *Context & token protocol*. Build the changelog from the `backlog.json` epic slice + `.claude/epic-*/ledger.md` — never re-read source or whole docs. **If a codegraph index is present (`.codegraph/`), query it for any code reference and read only the spans returned.**
+Follow the README *Context & token protocol*. Build the changelog from the `backlog.json` epic slice + `.throughline/epic-*/ledger.md` — never re-read source or whole docs. **If a codegraph index is present (`.codegraph/`), query it for any code reference and read only the spans returned.**
 
 ## Persona(s)
 - **Lead: PM** (what's shippable, release comms, go/no-go).
@@ -24,7 +24,7 @@ Follow the README *Context & token protocol*. Build the changelog from the `back
 - Public add-on (optional): product-tracking › instrument-new-feature (analytics for the release).
 
 ## Inputs
-- `backlog.json` (epics with `release: vX`), `.claude/epic-*/ledger.md`, success metrics doc.
+- `backlog.json` (epics with `release: vX`), `.throughline/epic-*/ledger.md`, success metrics doc.
 
 ## Gate-in
 - All epics tagged to this release are `done` (verified from the contract).

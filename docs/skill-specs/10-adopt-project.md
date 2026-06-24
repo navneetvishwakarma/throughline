@@ -24,21 +24,21 @@ Follow the README *Context & token protocol*. Audit via sections + the contract,
 - `engineering:tech-debt` (audit), `engineering:system-design` (reverse-arch), `product-management:roadmap-update`. codegraph build for code understanding.
 
 ## Inputs
-- Existing repo: any current local/GitHub tracker state (`.claude/ship-*`, issues), roadmap/progress files, docs, code.
+- Existing repo: any current local/GitHub tracker state (`.throughline/ship-*`, issues), roadmap/progress files, docs, code.
 
 ## Gate-in
 - A git repo exists. (No brief/PRD prerequisite — this is reverse-onboarding.)
 
 ## Procedure
 1. **Audit**: detect existing docs tier, tracker, progress files, and the codegraph index; report what's present/missing.
-2. **Rails**: run `init-project.mjs` (non-destructive), add `CLAUDE.md`, hooks/CI, and **build/refresh the codegraph index**.
+2. **Rails**: run `init-project.mjs` (non-destructive), add `AGENTS.md`, hooks/CI, and **build/refresh the codegraph index**.
 3. **Contract**: reconcile existing work into `backlog.json` — existing tracker items (epics/sub-issues) become epics/stories with `gh_issue`; orphan roadmap items become stories. **Seed status from the most authoritative source (ledgers/commits), not stale tracker state.**
 4. **Dedup**: merge duplicate tracking universes (e.g. roadmap slices vs tracker sub-issues) — never double-count.
 5. **Cut over**: repoint the dashboard to `backlog.json`; archive old progress files.
 6. **Verify** (subagent): `validate.mjs` passes; rollups match reality; counts cross-check vs the old tracker.
 
 ## Outputs
-- Rails + `CLAUDE.md` + a populated, validated `backlog.json` + a working dashboard; old trackers archived.
+- Rails + `AGENTS.md` + a populated, validated `backlog.json` + a working dashboard; old trackers archived.
 
 ## Automated gate
 - `validate.mjs` exits 0; every existing tracked item is represented exactly once.

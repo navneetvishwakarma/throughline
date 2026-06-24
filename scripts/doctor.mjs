@@ -28,7 +28,34 @@ function run(cwd, args) {
   return result;
 }
 
-function checkManifest() {
+function checkManifest(path, requiredFields) {
+  const manifest = readJson(path);
+  if (!manifest) return null;
+  for (const field of requiredFields) {
+    if (!manifest[field]) fail(path + ' missing ' + field);
+  }
+  return manifest;
+}
+
+function checkManifests() {
+  const claude = checkManifest(join(root, 'adapters/claude/.claude-plugin/plugin.json'), ['name', 'version', 'description', 'author']);
+  const codex = checkManifest(join(root, 'adapters/codex/.codex-plugin/plugin.json'), ['name', 'version', 'description', 'author', 'skills', 'interface']);
+  const rootCodex = checkManifest(join(root, '.codex-plugin/plugin.json'), ['name', 'version', 'description', 'author', 'skills', 'interface']);
+  const marketplace = readJson(join(root, '.agents/plugins/marketplace.json'));
+  if (!claude || !codex || !rootCodex || !marketplace) return;
+  if (claude.name !== 'throughline') fail('Claude adapter manifest name must be throughline');
+  if (codex.name !== 'throughline') fail('Codex adapter manifest name must be throughline');
+  if (rootCodex.name !== 'throughline') fail('Root Codex manifest name must be throughline');
+  if (codex.skills !== './skills/') fail('Codex adapter must expose ./skills/');
+  if (rootCodex.skills !== './skills/') fail('Root Codex manifest must expose ./skills/');
+  const entry = marketplace.plugins?.find((plugin) => plugin.name === 'throughline');
+  if (!entry) fail('.agents/plugins/marketplace.json missing throughline entry');
+  if (entry?.source?.path !== './') fail('repo Codex marketplace must point at ./');
+  if (entry?.policy?.installation !== 'AVAILABLE') fail('repo Codex marketplace install policy must be AVAILABLE');
+  if (entry?.policy?.authentication !== 'ON_INSTALL') fail('repo Codex marketplace auth policy must be ON_INSTALL');
+}
+
+function checkLegacyManifest() {
   const manifest = readJson(join(root, '.claude-plugin/plugin.json'));
   if (!manifest) return;
   for (const field of ['name', 'version', 'description', 'author']) {
@@ -123,7 +150,8 @@ function checkScaffold() {
   }
 }
 
-checkManifest();
+checkLegacyManifest();
+checkManifests();
 checkSkills();
 checkScriptSyntax();
 checkEvals();

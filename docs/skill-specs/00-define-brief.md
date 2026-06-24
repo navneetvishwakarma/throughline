@@ -15,7 +15,7 @@ wants to begin. Runs first in the pipeline. Also runs at the start of each new
 version cycle (v2+), where it is grounded in metrics + user feedback.
 
 ## Context (token protocol)
-Follow the README *Context & token protocol*. Load `CLAUDE.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for any code lookup and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
+Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for any code lookup and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
 
 ## Persona(s)
 - **Lead: PM** — starts from the user problem and a measurable outcome, never the solution; ruthless on scope; states assumptions explicitly.

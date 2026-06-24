@@ -157,6 +157,66 @@ test('doctor validates plugin package and scaffold fixture', () => {
   assert.match(result.stdout, /OK throughline doctor passed/);
 });
 
+test('platform adapters expose Claude and Codex plugin manifests', () => {
+  const claudeManifestPath = join(repoRoot, 'adapters/claude/.claude-plugin/plugin.json');
+  const codexManifestPath = join(repoRoot, 'adapters/codex/.codex-plugin/plugin.json');
+  const codexMarketplacePath = join(repoRoot, '.agents/plugins/marketplace.json');
+
+  assert.equal(existsSync(claudeManifestPath), true);
+  assert.equal(existsSync(codexManifestPath), true);
+  assert.equal(existsSync(codexMarketplacePath), true);
+
+  const claude = JSON.parse(readFileSync(claudeManifestPath, 'utf8'));
+  const codex = JSON.parse(readFileSync(codexManifestPath, 'utf8'));
+  const marketplace = JSON.parse(readFileSync(codexMarketplacePath, 'utf8'));
+
+  assert.equal(claude.name, 'throughline');
+  assert.equal(codex.name, 'throughline');
+  assert.equal(codex.skills, './skills/');
+  assert.equal(codex.interface.displayName, 'Throughline');
+  assert.equal(marketplace.plugins[0].source.path, './');
+  assert.equal(marketplace.plugins[0].policy.installation, 'AVAILABLE');
+  assert.equal(marketplace.plugins[0].policy.authentication, 'ON_INSTALL');
+});
+
+test('installer supports claude, codex, and antigravity dry runs', () => {
+  const installScript = join(repoRoot, 'scripts/install.mjs');
+
+  for (const platform of ['claude', 'codex', 'antigravity']) {
+    const result = runNode(repoRoot, installScript, [platform, '--dry-run']);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, new RegExp('platform=' + platform));
+  }
+});
+
+test('PowerShell installer wrapper passes platform arguments through', () => {
+  const result = spawnSync('pwsh', ['./install.ps1', '-Platform', 'codex', '-DryRun'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /platform=codex/);
+  assert.match(result.stdout, /dry-run: no files changed/);
+});
+
+test('bootstrap scaffold uses platform-neutral throughline working state', () => {
+  const root = makeProject('neutral-state');
+  try {
+    const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    const syncStatus = readFileSync(join(root, 'scripts/sync-status.mjs'), 'utf8');
+
+    assert.match(agents, /\.throughline\/epic-<n>\//);
+    assert.doesNotMatch(agents, /\.claude\/epic-<n>\//);
+    assert.match(syncStatus, /throughlineDir/);
+    assert.doesNotMatch(syncStatus, /claudeDir/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('skill eval set covers production workflow risks', () => {
   const evalPath = join(repoRoot, 'evals/evals.json');
   assert.equal(existsSync(evalPath), true);

@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 const root = process.cwd();
 const backlogPath = join(root, 'docs/engineering/backlog.json');
-const claudeDir = join(root, '.claude');
+const throughlineDir = join(root, '.throughline');
 const data = JSON.parse(readFileSync(backlogPath, 'utf8'));
 const tracker = data.tracker || 'local';
 const supportedTrackers = ['local', 'github'];
@@ -12,12 +12,12 @@ if (!supportedTrackers.includes(tracker)) {
   console.error('Unsupported tracker ' + JSON.stringify(tracker) + '. Supported trackers: ' + supportedTrackers.join(', '));
   process.exit(1);
 }
-// GitHub adapter: scan .claude/ship-*/issue-*.json.
+// GitHub adapter: scan .throughline/ship-*/issue-*.json.
 const ghState = new Map();
-if (tracker === 'github' && existsSync(claudeDir)) {
-  for (const dir of readdirSync(claudeDir)) {
+if (tracker === 'github' && existsSync(throughlineDir)) {
+  for (const dir of readdirSync(throughlineDir)) {
     if (!dir.startsWith('ship-')) continue;
-    const shipDir = join(claudeDir, dir);
+    const shipDir = join(throughlineDir, dir);
     for (const f of readdirSync(shipDir)) {
       if (!f.endsWith('.json')) continue;
       try {

@@ -48,5 +48,5 @@ node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (zero tokens)
 
 ## Skill working state
 
-`.claude/epic-<n>/` (epic.json, sub-<n>.json, ledger.md) and `.claude/ship-<n>/issue-<n>.json`
-are owned by the skills — do not hand-edit. `sy
+`.throughline/epic-<n>/` (epic.json, sub-<n>.json, ledger.md) and `.throughline/ship-<n>/issue-<n>.json`
+are owned by the skills. Do not hand-edit them.

@@ -99,9 +99,9 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 
 ### 1 · `bootstrap-project` — make it AI-ready
 - **Mode:** first cycle only. (Existing repos use `adopt-project` instead — see below.)
-- **Does:** runs **inside a repo the user owns** (offers a decision-free local `git init` only if none exists — never the remote, visibility, or license) → `node scripts/init-project.mjs "<name>"` (doc tree, `CLAUDE.md`, empty `backlog.json`) → create the workflow issue **labels** (`epic`, `feature`) on the chosen `tracker` → install the **pre-commit hook** running `validate.mjs` **and a codegraph re-index** → set up **CI** (so `verify.ci` is real) → point the define-* skills at `docs/engineering/backlog.json`.
+- **Does:** runs **inside a repo the user owns** (offers a decision-free local `git init` only if none exists — never the remote, visibility, or license) → `node scripts/init-project.mjs "<name>"` (doc tree, `AGENTS.md`, empty `backlog.json`) → create the workflow issue **labels** (`epic`, `feature`) on the chosen `tracker` → install the **pre-commit hook** running `validate.mjs` **and a codegraph re-index** → set up **CI** (so `verify.ci` is real) → point the define-* skills at `docs/engineering/backlog.json`.
 - **Scope boundary:** the plugin owns everything *inside* the repo; the repo's existence, host, visibility, and license are the user's.
-- **Automated gate:** `validate.mjs` passes; CI green; `CLAUDE.md` present; codegraph re-index hook installed.
+- **Automated gate:** `validate.mjs` passes; CI green; `AGENTS.md` present; codegraph re-index hook installed.
 - **👤 gate:** none (mechanical). *Note:* the codegraph index is empty until code lands — it fills in from implement-epic onward.
 
 ### 1b · `adopt-project` — onboard an existing repo *(brownfield, replaces step 1)*
@@ -141,7 +141,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 
 ### 6 · `define-epic` — expand one epic *(loop)*
 - **Mode:** per epic; picks the lowest-`order` epic whose stories' deps are `done`.
-- **Writes:** `.claude/epic-<n>/` (epic.json, sub-issue specs, ledger, **test plan** via `engineering:testing-strategy`) + creates the **GH epic issue + one sub-issue per story**; writes `gh_issue` back into `backlog.json`.
+- **Writes:** `.throughline/epic-<n>/` (epic.json, sub-issue specs, ledger, **test plan** via `engineering:testing-strategy`) + creates the **GH epic issue + one sub-issue per story**; writes `gh_issue` back into `backlog.json`.
 - **Automated gate:** every story has scope + acceptance + invariants + a test plan; GH issues created.
 - **👤 G6:** review the epic plan / test plan / ledger before any code is written.
 
@@ -211,9 +211,9 @@ ever lives in the adapter:
   a non-Claude agent performs the step directly. The spec is the source of truth.
 - **codegraph** already supports Claude, Cursor, Codex, Gemini, OpenCode; **tracker** is
   abstracted and local by default. Both neutral.
-- **The Claude plugin is just the first adapter.** Cursor (`.cursor/rules`), Codex/others
-  (`AGENTS.md`), and Aider can each get a thin adapter that drops the same scaffold and points
-  at the same engine — no engine changes.
+- **Claude Code and Codex are first-class adapters.** Antigravity uses skills-folder installation
+  until it has a richer plugin marketplace format. Cursor and Aider can each get a thin adapter
+  that drops the same scaffold and points at the same engine — no engine changes.
 
 ## Works with or without a tracker (public-plugin requirement)
 
