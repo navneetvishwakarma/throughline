@@ -17,7 +17,7 @@ Audit via section reads and the codegraph query, not whole-tree reads. **If no c
 
 1. **Audit** — detect and report what's already present:
    - Docs tier: product docs, PRD, architecture, design, backlog files.
-   - Tracker: `.claude/ship-*/`, `.claude/epic-*/`, GitHub issues, Linear, roadmap/progress files.
+   - Tracker: `.claude/ship-*/`, `.claude/epic-*/`, GitHub issues, roadmap/progress files.
    - CI, pre-commit hooks, codegraph index.
    - Security surfaces: auth/PII/secrets already in the codebase (flag for the security lens).
    Print a one-page audit: ✓ present / ✗ missing per item.
@@ -25,7 +25,7 @@ Audit via section reads and the codegraph query, not whole-tree reads. **If no c
 2. **Rails** — run `node scripts/init-project.mjs "<name>"` (non-destructive: never overwrites existing files). Add `CLAUDE.md` (if absent), `AGENTS.md`, pre-commit hook (`node scripts/validate.mjs`), and CI config if a CI connector is present. Build or refresh the codegraph index.
 
 3. **Contract** — reconcile existing work into `docs/engineering/backlog.json`:
-   - Existing tracker items (GH epic issues + sub-issues, Linear cards, roadmap slices) → epics + stories with `gh_issue` where relevant.
+   - Existing tracker items (GH epic issues + sub-issues, roadmap slices) → epics + stories with `gh_issue` where relevant.
    - Orphan roadmap items with no tracker counterpart → stories without `gh_issue`.
    - **Seed status from the most authoritative source: ledger files and commits, not stale tracker state.** A closed GH issue wins over a stale "in_progress" in a roadmap file.
    - Do not double-count: one epic/story per work item, regardless of how many places it appears.

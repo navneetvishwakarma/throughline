@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Solo dev superpowers — a spec-driven, gated workflow that lets one developer ship like a team.",
   "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "doctor": "node scripts/doctor.mjs"
+  },
   "author": {
     "name": "Navneet Vishwakarma"
   },

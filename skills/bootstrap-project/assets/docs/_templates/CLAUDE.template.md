@@ -14,14 +14,14 @@ do not re-derive it from the codebase.
 ## Status enum
 
 `notstarted` · `in_progress` · `blocked` · `done`.
-**`status` is owned by `scripts/sync-status.mjs` — never hand-edit it.** It is
-mirrored from GitHub issue state.
+**`status` is owned by `scripts/sync-status.mjs` in GitHub mode and by the
+workflow skills in local mode — never hand-edit it casually.**
 
 ## Field ownership (do not clobber)
 
 - Scope (`id`, `title`, `order`, `phase`, `prd_ref`, `acceptance`, `blocked_by`): human + define skill.
 - `epic`, `gh_issue`: written back by the define/ship skill after the GH issue exists.
-- `status`, `verify`: `sync-status.mjs` only.
+- `status`, `verify`: status adapter + implement/ship evidence.
 
 ## Workflow
 
@@ -41,7 +41,8 @@ implementation.
 
 ```
 node scripts/validate.mjs         # validate the contract (run before commit/build)
-node scripts/sync-status.mjs      # mirror GH issue state into the contract
+node scripts/gate.mjs check G6    # verify a human gate before proceeding
+node scripts/sync-status.mjs      # update local/GitHub status into the contract
 node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (zero tokens)
 ```
 

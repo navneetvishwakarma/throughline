@@ -7,7 +7,7 @@
  * DERIVED here and never stored. Standard dashboard template for every repo.
  *
  * Shows: schedule verdict (behind/on track/ahead), a prioritized work board
- * (Blocked → Next → In Progress → Done[collapsed]), per-release progress, and
+ * (Blocked → In Progress → Next → Done[collapsed]), per-release progress, and
  * deep links from each item to its GitHub issue (when available) or to the
  * responsible doc/section.
  *
@@ -120,4 +120,109 @@ function column(key, items, collapsed) {
 // ---- release progress ----
 const releaseOrder = [];
 for (const e of epics) { const r = e.release || ''; if (!releaseOrder.includes(r)) releaseOrder.push(r); }
-funct
+function releaseRow(rel) {
+  const epicIds = epics.filter((e) => (e.release || '') === rel).map((e) => e.id);
+  const relStories = stories.filter((s) => epicIds.includes(s.epic));
+  const { total, done: dn, pct: rp, status } = rollup(relStories);
+  const m = SM[status] || SM.notstarted;
+  return '<div class="relrow"><span class="relname">' + esc(rel || '(untagged)') + '</span>'
+    + '<div class="relbar"><div class="relfill" style="width:' + rp + '%;background:' + m.c + '"></div></div>'
+    + '<span class="relpct">' + esc(String(rp)) + '%</span>'
+    + '<span class="relcount">' + esc(String(dn)) + '/' + esc(String(total)) + '</span></div>';
+}
+const relSection = releaseOrder.map(releaseRow).join('');
+
+// ---- epic rows ----
+function epicRow(e) {
+  const cs = byEpic.get(e.id) || [];
+  const { total, done: dn, pct: ep, status } = rollup(cs);
+  const m = SM[status] || SM.notstarted;
+  const badge = '<span class="badge" style="color:' + m.c + ';background:' + (m.bg || '#f5f5f5') + '">' + m.label + '</span>';
+  return '<tr><td><span class="eid">' + esc(e.id) + '</span></td>'
+    + '<td>' + esc(e.title) + '</td>'
+    + '<td>' + badge + '</td>'
+    + '<td><div class="ebar"><div class="efill" style="width:' + ep + '%;background:' + m.c + '"></div></div></td>'
+    + '<td class="epct">' + esc(String(dn)) + '/' + esc(String(total)) + '</td></tr>';
+}
+
+// ---- HTML ----
+const css = `*{box-sizing:border-box;margin:0;padding:0}body{font:14px/1.5 system-ui,sans-serif;background:#f8f8f8;color:#1a1a1a}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.5rem;font-weight:700;margin-bottom:4px}
+.sub{color:#666;font-size:.85rem;margin-bottom:24px}
+.verdict{border-radius:10px;padding:20px 24px;color:#fff;margin-bottom:24px;background:${verdict.grad}}
+.verdict h2{font-size:1.1rem;font-weight:600;margin-bottom:4px}
+.verdict .hl{font-size:.9rem;opacity:.9;margin-bottom:8px}
+.verdict .act{font-size:.85rem;opacity:.8}
+.ring{display:inline-flex;align-items:center;gap:12px;background:rgba(255,255,255,.15);border-radius:8px;padding:8px 14px;margin-bottom:12px}
+.ringpct{font-size:1.8rem;font-weight:700}
+.ringof{font-size:.85rem;opacity:.8}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:32px}
+.col{background:#fff;border-radius:10px;padding:12px}
+.col.done{background:#fff;border-radius:10px;padding:0}
+details.done summary{padding:12px;cursor:pointer;list-style:none;border-radius:10px}
+details.done summary::-webkit-details-marker{display:none}
+details.done .cards{padding:0 12px 12px}
+.colh{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.85rem;margin-bottom:10px}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cnt{margin-left:auto;background:#f0f0f0;border-radius:20px;padding:1px 8px;font-size:.8rem;color:#555}
+.card{background:#f9f9f9;border-radius:8px;border-left:3px solid #ccc;padding:10px 12px;margin-bottom:8px}
+.crow{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.sid{font-weight:700;font-size:.8rem;color:#555}
+.title{font-size:.88rem;margin-bottom:4px}
+.meta{font-size:.78rem;color:#888}
+.echip{background:#eee;border-radius:4px;padding:1px 6px}
+.dep{font-size:.78rem;color:#e5484d;margin-top:4px}
+.lnk{font-size:.78rem;text-decoration:none;border-radius:4px;padding:1px 6px;margin-left:auto}
+.lnk.gh{color:#2c7be5;background:#e9f1fd}
+.lnk.prd{color:#6f42c1;background:#f0ebfd}
+.lnk.file{color:#555;background:#eee}
+.empty{color:#aaa;font-size:.85rem;padding:8px 0}
+h2{font-size:1rem;font-weight:600;margin-bottom:12px}
+.releases{margin-bottom:28px}
+.relrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee}
+.relname{width:80px;font-size:.82rem;font-weight:600;flex-shrink:0}
+.relbar{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}
+.relfill{height:100%;border-radius:4px;transition:width .3s}
+.relpct{width:40px;text-align:right;font-size:.82rem;color:#555}
+.relcount{width:50px;text-align:right;font-size:.78rem;color:#888}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
+th{text-align:left;font-size:.78rem;font-weight:600;color:#888;padding:8px 12px;border-bottom:2px solid #eee}
+td{padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:.85rem;vertical-align:middle}
+.eid{font-weight:700;font-size:.78rem;color:#555}
+.badge{font-size:.75rem;font-weight:600;border-radius:20px;padding:2px 8px}
+.ebar{width:80px;height:6px;background:#eee;border-radius:3px;overflow:hidden}
+.efill{height:100%;border-radius:3px}
+.epct{color:#888;font-size:.8rem}
+.ts{color:#aaa;font-size:.75rem;margin-top:24px;text-align:right}`;
+
+const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(data.project)} — Progress Dashboard</title>
+<style>${css}</style></head>
+<body><div class="wrap">
+<h1>${esc(data.project)}</h1>
+<div class="sub">Progress Dashboard &middot; generated ${today} &middot; <a href="${esc(data.prd || '')}">PRD</a></div>
+<div class="verdict" style="background:${verdict.grad}">
+  <div class="ring"><span class="ringpct">${pct}%</span><span class="ringof">${sd} of ${stories.length} stories done</span></div>
+  <h2>${verdict.word}</h2>
+  <div class="hl">${esc(headline)}</div>
+  <div class="act">${esc(action)}</div>
+</div>
+<h2>Work board</h2>
+<div class="board">
+${column('blocked', buckets.blocked, false)}
+${column('in_progress', buckets.in_progress, false)}
+${column('next', buckets.next, false)}
+${column('done', buckets.done, true)}
+</div>
+${releaseOrder.length ? '<h2>By release</h2><div class="releases">' + relSection + '</div>' : ''}
+<h2>Epics</h2>
+<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Progress</th><th>Done</th></tr></thead>
+<tbody>${epics.map(epicRow).join('')}</tbody></table>
+<div class="ts">Source: docs/engineering/backlog.json</div>
+</div></body></html>`;
+
+writeFileSync(outPath, html, 'utf8');
+console.log('OK dashboard written → ' + outPath);

@@ -11,7 +11,7 @@
     "project": { "type": "string", "minLength": 1 },
     "tagline": { "type": "string" },
     "repo": { "type": "string", "description": "Repo base URL for deep-linking issues (only when a remote tracker is used)." },
-    "tracker": { "enum": ["local", "github", "gitlab", "linear", "jira"], "default": "local", "description": "Optional issue-tracker mirror. Default 'local' = offline, no account: stories are the work items, status set by the skills, dashboard links to PRD/backlog. Other values mirror via the sync adapter." },
+    "tracker": { "enum": ["local", "github"], "default": "local", "description": "Optional issue-tracker mirror. Default 'local' = offline, no account: stories are the work items, status set by the skills, dashboard links to PRD/backlog. GitHub mirrors via the sync adapter." },
     "health": {
       "type": "object", "additionalProperties": false,
       "description": "Optional schedule verdict shown on the dashboard (behind/ahead needs a schedule, so it is set, not derived).",
@@ -49,18 +49,18 @@
     },
     "story": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "title", "epic", "status", "order"],
+      "required": ["id", "title", "epic", "prd_ref", "acceptance", "blocked_by", "status", "order"],
       "properties": {
         "id": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" },
         "title": { "type": "string", "minLength": 1 },
         "epic": { "type": "string", "pattern": "^E-[0-9]+$", "description": "REQUIRED. The epic this story belongs to." },
-        "prd_ref": { "type": "string" },
+        "prd_ref": { "type": "string", "pattern": "^REQ-[0-9]+$" },
         "gh_issue": { "type": ["integer", "null"] },
         "status": { "enum": ["notstarted", "in_progress", "blocked", "done"], "description": "Owned by the status adapter (sync-status with a tracker, or the skills in local mode). Never hand-edit casually." },
-        "blocked_by": { "type": "array", "items": { "type": "string" } },
+        "blocked_by": { "type": "array", "items": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" } },
         "order": { "type": "integer" },
         "estimate": { "type": "number" },
-        "acceptance": { "type": "string" },
+        "acceptance": { "type": "string", "minLength": 1 },
         "verify": {
           "type": "object", "additionalProperties": false,
           "properties": { "ci": { "enum": ["pass", "fail", "pending", "none"] }, "coverage": { "type": "number", "minimum": 0, "maximum": 1 }, "commit": { "type": "string" } }

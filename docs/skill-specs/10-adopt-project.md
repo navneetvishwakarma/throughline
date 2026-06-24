@@ -24,7 +24,7 @@ Follow the README *Context & token protocol*. Audit via sections + the contract,
 - `engineering:tech-debt` (audit), `engineering:system-design` (reverse-arch), `product-management:roadmap-update`. codegraph build for code understanding.
 
 ## Inputs
-- Existing repo: any current tracker (`.claude/ship-*`, issues), roadmap/progress files, docs, code.
+- Existing repo: any current local/GitHub tracker state (`.claude/ship-*`, issues), roadmap/progress files, docs, code.
 
 ## Gate-in
 - A git repo exists. (No brief/PRD prerequisite — this is reverse-onboarding.)

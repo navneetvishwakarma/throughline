@@ -57,13 +57,14 @@ write-spec (PRD, REQ-xx) → [PRD approved] → define-backlog → [validate] �
 1. PRD front-matter is `status: approved` (the human gate). If `draft`, stop.
 2. Requirements have stable `REQ-xx` ids and testable acceptance. Flag any missing.
 3. `backlog.json` (v2) and the schema exist.
+4. If `scripts/gate.mjs` exists, G2 is approved.
 
 ## Outputs (write)
 
 Only `docs/engineering/backlog.json`:
 
 - `epics[]` — `id` (`E-x`), `title`, `phase`, `prd_ref` (string or array), `order`, `release` (e.g. `v1`/`v2`), `vertical` (false for enablers), optional `estimate` + `target_date` (→ objective schedule health), `acceptance`. **No status.**
-- `stories[]` — `id` (`S-x`), `title`, `epic` (**required**, `E-x`), `prd_ref`, `order`, `blocked_by`, `acceptance`, `status: "notstarted"`.
+- `stories[]` — `id` (`S-x`), `title`, `epic` (**required**, `E-x`), `prd_ref`, `order`, `blocked_by`, `acceptance`, `status: "notstarted"`. `prd_ref`, `acceptance`, and `blocked_by` are required so stories cannot become untraceable work.
 
 **Never** write `gh_issue` (define-epic owns it) or story `status` beyond the initial
 `notstarted` (sync owns it) or `verify`.

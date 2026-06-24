@@ -23,6 +23,7 @@ In local mode there is no remote repo, no PR, no GitHub. G7 is a local review an
 
 **2. Merge on approval:**
 ```bash
+node scripts/gate.mjs approve G7 --note "local epic merge approved"
 git checkout main
 git merge --no-ff epic/<epic-id>-<slug> -m "merge: epic <epic-id>"
 ```
@@ -46,7 +47,7 @@ Residual risks: <list or "none">
 
 ---
 
-## Mode B — Remote tracker (tracker: github|gitlab|linear|jira)
+## Mode B — Remote tracker (tracker: github)
 
 **1. Branch quality gate** — run build + full test suite. If either fails: stop; do not push.
 
@@ -81,6 +82,7 @@ EOF
 
 **6. G7 merge** — ask the user to approve the PR. On approval:
 ```bash
+node scripts/gate.mjs approve G7 --note "PR merge approved"
 gh pr merge --merge --delete-branch
 ```
 

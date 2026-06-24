@@ -92,7 +92,7 @@ prevents the same content being parsed again and again.
 ## Other shared conventions
 
 - Personas' full descriptions live in `../workflow-master.md`; specs name lead/supporting only.
-- Contract = `docs/engineering/backlog.json` (schema v2); field ownership + status enum in
+- Contract = `docs/engineering/backlog.json` (schema v2); gate approvals live in `.throughline/gates.json`; field ownership + status enum in
   `../scaffold/docs/engineering/workflow.md` — never violate.
 - Persona conflicts → **surface at the human gate**, never resolve silently.
 - Every skill ends with the repo in a `validate.mjs`-passing state.
