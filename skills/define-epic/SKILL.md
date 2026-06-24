@@ -11,7 +11,7 @@ Act as a top-0.1% FAANG principal architect. Decompose one epic into airtight pe
 `docs/engineering/backlog.json` is valid (`node scripts/validate.mjs` passes); G5 is approved (`node scripts/gate.mjs check G5` when available); at least one epic's stories all have `blocked_by` deps satisfied (all `done`). If none is unblocked: report and stop.
 
 ## Context protocol
-Load `CLAUDE.md` + only the chosen epic's stories + their `prd_ref` requirement from the PRD + the ADR linked to the epic. Never load whole docs. If a codegraph index is present (`.codegraph/`), query it to map the epic to affected symbols/files and read only those spans — never scan the source tree.
+Load `AGENTS.md` + only the chosen epic's stories + their `prd_ref` requirement from the PRD + the ADR linked to the epic. Never load whole docs. If a codegraph index is present (`.codegraph/`), query it to map the epic to affected symbols/files and read only those spans — never scan the source tree.
 
 ## Step 1 — Pick the epic
 
@@ -19,7 +19,7 @@ Read `docs/engineering/backlog.json`. Select the epic with the lowest `order` wh
 
 ## Step 2 — Expand each story
 
-For each child story of the chosen epic, write a per-story spec in `.claude/epic-<N>/sub-<story-id>.json`:
+For each child story of the chosen epic, write a per-story spec in `.throughline/epic-<N>/sub-<story-id>.json`:
 
 ```json
 {
@@ -37,11 +37,11 @@ For each child story of the chosen epic, write a per-story spec in `.claude/epic
 
 ## Step 3 — Test plan
 
-Write `.claude/epic-<N>/test-plan.md` covering each story: what unit, integration, and E2E tests verify each acceptance criterion. Use `engineering:testing-strategy` if available; otherwise produce the plan directly.
+Write `.throughline/epic-<N>/test-plan.md` covering each story: what unit, integration, and E2E tests verify each acceptance criterion. Use `engineering:testing-strategy` if available; otherwise produce the plan directly.
 
 ## Step 4 — Ledger skeleton
 
-Initialize `.claude/epic-<N>/ledger.md`:
+Initialize `.throughline/epic-<N>/ledger.md`:
 
 ```
 | story | scope | files | tests | commit | status | risks |
@@ -50,7 +50,7 @@ Initialize `.claude/epic-<N>/ledger.md`:
 
 ## Step 5 — Tracker integration
 
-**If `tracker: local` (the default):** skip all issue creation. Stories are the work items; `gh_issue` stays `null`; specs live in `.claude/epic-<N>/`. No account or network needed.
+**If `tracker: local` (the default):** skip all issue creation. Stories are the work items; `gh_issue` stays `null`; specs live in `.throughline/epic-<N>/`. No account or network needed.
 
 **If `tracker: github`:**
 
@@ -87,7 +87,7 @@ Run `node scripts/validate.mjs` after any write-back; fix until it passes.
 Present the epic plan, per-story specs, and test plan. Ask the user to approve **before any code is written**. On approval run `node scripts/gate.mjs approve G6 --note "epic plan approved"` when available. Then the epic is ready for `implement-epic`.
 
 ## Done when
-`.claude/epic-<N>/` exists with all story specs, test-plan.md, and ledger skeleton; `gh_issue` written back (tracker mode only); `validate.mjs` passes; G6 approved.
+`.throughline/epic-<N>/` exists with all story specs, test-plan.md, and ledger skeleton; `gh_issue` written back (tracker mode only); `validate.mjs` passes; G6 approved.
 
 ## Failure modes
 - No unblocked epic → report which epics are blocked and by what; stop.

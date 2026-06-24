@@ -11,7 +11,7 @@ Act as a top-0.1% FAANG principal architect. Design the simplest system that sat
 `docs/product/06-prd.md` is `status: approved`. If not, stop and say so.
 
 ## Context protocol
-Load `CLAUDE.md` + the PRD `## Requirements` section only. If mockups are available (`docs/design/`), read the relevant screen; don't read the whole design tier. If a codegraph index exists (`.codegraph/`), query it for any data-model or dependency lookup; read only the spans returned.
+Load `AGENTS.md` + the PRD `## Requirements` section only. If mockups are available (`docs/design/`), read the relevant screen; don't read the whole design tier. If a codegraph index exists (`.codegraph/`), query it for any data-model or dependency lookup; read only the spans returned.
 
 ## Do this
 

@@ -31,11 +31,11 @@ Follow the README *Context & token protocol*. Read only the chosen epic's storie
 2. **Write back:** after creating GH issues, write `epic.gh_issue` (parent) and each story's `gh_issue` (sub-issue) into `backlog.json`. Do **not** touch `status`.
 3. **Per-story spec** for each child story: goal, in/out scope, acceptance, invariants, spec references (PRD `REQ-xx`, ADRs).
 4. **Test plan** for the epic (via `engineering:testing-strategy`): what unit/integration/E2E covers each story's acceptance.
-5. Keep emitting `.claude/epic-<n>/` (epic.json, sub-<n>.json, ledger.md, test-plan.md) as today.
-6. **Local mode (`tracker: local`, the default):** skip all issue creation — the stories ARE the work items, `gh_issue` stays `null`, the specs live in `.claude/epic-<n>/`, and status is tracked in the backlog. No account or network needed.
+5. Keep emitting `.throughline/epic-<n>/` (epic.json, sub-<n>.json, ledger.md, test-plan.md) as today.
+6. **Local mode (`tracker: local`, the default):** skip all issue creation — the stories ARE the work items, `gh_issue` stays `null`, the specs live in `.throughline/epic-<n>/`, and status is tracked in the backlog. No account or network needed.
 
 ## Inputs / Outputs
-- Reads: `backlog.json`, PRD, architecture/ADRs, design. Writes: GH epic + sub-issues; `.claude/epic-<n>/*`; `gh_issue` fields back into `backlog.json`.
+- Reads: `backlog.json`, PRD, architecture/ADRs, design. Writes: GH epic + sub-issues; `.throughline/epic-<n>/*`; `gh_issue` fields back into `backlog.json`.
 
 ## Automated gate
 - Every child story has scope + acceptance + invariants + test coverage in the plan; GH issues created; `validate.mjs` passes after write-back.

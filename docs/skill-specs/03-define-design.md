@@ -15,7 +15,7 @@ Runs in parallel with define-architecture. First cycle = tokens + a few primitiv
 grow later.
 
 ## Context (token protocol)
-Follow the README *Context & token protocol*. Load `CLAUDE.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for any code lookup and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
+Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for any code lookup and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
 
 ## Persona(s)
 - **Lead: UX** — design around the user's mental model; cut cognitive load; tokens/primitives first; a11y, motion, empty states, microcopy as first-class.

@@ -88,7 +88,7 @@ gh pr merge --merge --delete-branch
 
 **7. Close issues** — for each child story with a `gh_issue` in `backlog.json`:
 ```bash
-gh issue view <N> --json state,number > .claude/ship-<epic-id>/issue-<N>.json
+gh issue view <N> --json state,number > .throughline/ship-<epic-id>/issue-<N>.json
 # Mark AC complete, add completion comment, close:
 gh issue comment <N> --body "Resolved in #<PR>."
 gh issue close <N>

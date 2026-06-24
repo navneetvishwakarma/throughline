@@ -8,14 +8,14 @@ description: Use when an epic has been defined and G6 approved, and the user wan
 Act as a top-0.1% FAANG senior developer. Write simple, readable, well-tested code in small vertical increments. Optimise for correctness. Leave the codebase cleaner than you found it.
 
 ## Gate-in
-G6 is approved: `.claude/epic-<N>/` exists with story specs, test-plan.md, and ledger skeleton, and `node scripts/gate.mjs check G6` passes when the script exists.
+G6 is approved: `.throughline/epic-<N>/` exists with story specs, test-plan.md, and ledger skeleton, and `node scripts/gate.mjs check G6` passes when the script exists.
 
 ## Context protocol
 Work from the sub-issue spec + ledger. If a codegraph index is present (`.codegraph/`), query it to locate the exact symbols/call sites to change and read only those spans — never scan or read whole files to find code. Don't re-read docs the epic spec already distilled.
 
 ## Step 1 — Fetch and orient
 
-Read `docs/engineering/backlog.json` (the chosen epic slice only). Read `.claude/epic-<N>/epic.json` + all `sub-<id>.json` story specs. Read `AGENTS.md` (or `CLAUDE.md`) once; store for sub-agents.
+Read `docs/engineering/backlog.json` (the chosen epic slice only). Read `.throughline/epic-<N>/epic.json` + all `sub-<id>.json` story specs. Read `AGENTS.md` once; store for sub-agents.
 
 Determine the epic branch: `epic/<epic-id>-<slug>`.
 
@@ -34,7 +34,7 @@ Work through stories sequentially.
 
 **2a — Task breakdown**
 
-Read the story spec from `.claude/epic-<N>/sub-<id>.json`. Read only the files listed in the technical notes (or returned by a codegraph query). Produce:
+Read the story spec from `.throughline/epic-<N>/sub-<id>.json`. Read only the files listed in the technical notes (or returned by a codegraph query). Produce:
 
 ```
 Story <id>: <title>
@@ -70,7 +70,7 @@ Do NOT switch or create branches.
 
 **2c — Record ledger row**
 
-Append to `.claude/epic-<N>/ledger.md`:
+Append to `.throughline/epic-<N>/ledger.md`:
 ```
 | <id> | <scope> | <files> | <test cmd> → pass | <SHA> | done | <risks> |
 ```
@@ -103,7 +103,7 @@ After all stories are committed:
 
 ```bash
 npm run build    # or project equivalent
-npm test 2>&1 | tee .claude/epic-<N>/test-out.txt
+npm test 2>&1 | tee .throughline/epic-<N>/test-out.txt
 ```
 
 Surface test output only on failure. On failure: stop, report, fix before continuing.

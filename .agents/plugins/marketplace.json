@@ -1,0 +1,20 @@
+{
+  "name": "throughline-local",
+  "interface": {
+    "displayName": "Throughline Local"
+  },
+  "plugins": [
+    {
+      "name": "throughline",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

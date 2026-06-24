@@ -43,7 +43,7 @@ dashboard and never stored.
 
 - In GitHub mode, its issue is CLOSED. In local mode, `ship-epic` marks it done.
 - Acceptance criteria met; tests for the change pass (`verify.ci: pass`).
-- The epic ledger (`.claude/epic-<n>/ledger.md`) records files, tests, commit.
+- The epic ledger (`.throughline/epic-<n>/ledger.md`) records files, tests, commit.
 
 ## Human approval gates (the agent stops here)
 

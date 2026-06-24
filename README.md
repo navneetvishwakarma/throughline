@@ -14,18 +14,42 @@
 git clone https://github.com/navneetvishwakarma/throughline.git
 cd throughline
 
-# Windows
+# Claude Code, Windows
 ./install.ps1
 
-# macOS / Linux
+# Claude Code, macOS / Linux
 chmod +x install.sh && ./install.sh
 ```
 
-Then restart Claude Code.
+Then restart the target AI tool.
 
-To update: `git pull` then re-run the install script and restart Claude Code.
+Codex:
 
-To uninstall: `./install.ps1 -Uninstall` or `./install.sh --uninstall`.
+```bash
+# Windows
+./install.ps1 -Platform codex
+
+# macOS / Linux
+./install.sh codex
+```
+
+This copies the plugin to `~/plugins/throughline` and updates `~/.agents/plugins/marketplace.json`.
+
+Antigravity:
+
+```bash
+# Windows
+./install.ps1 -Platform antigravity
+
+# macOS / Linux
+./install.sh antigravity
+```
+
+This installs namespaced Throughline skills into `~/.agents/skills/`. Antigravity support is skills-folder based until Antigravity has a richer plugin marketplace format.
+
+To update: `git pull`, re-run the install script for your platform, then restart the target AI tool.
+
+To uninstall: `./install.ps1 -Platform codex -Uninstall` or `./install.sh codex --uninstall`. Replace `codex` with `claude` or `antigravity`.
 
 To verify a source checkout:
 
@@ -40,7 +64,20 @@ npm run doctor
 npx skills add throughline
 ```
 
-Requires Node.js 18+. Works with Claude Code (and any coding agent that reads `AGENTS.md`).
+Requires Node.js 18+. First-class adapters exist for Claude Code and Codex. Antigravity uses the skills-folder install path. Any coding agent that reads `AGENTS.md` can still follow the core workflow.
+
+---
+
+## Repository layout
+
+Throughline separates the portable workflow from platform packaging:
+
+- `skills/` contains the platform-neutral skills.
+- `skills/bootstrap-project/assets/` contains the deterministic scaffold, scripts, templates, and dashboard builder copied into user projects.
+- `adapters/claude/` contains Claude Code plugin metadata.
+- `adapters/codex/` contains Codex plugin metadata.
+- `.codex-plugin/` and `.agents/plugins/marketplace.json` expose the source checkout directly to Codex as a repo-local plugin.
+- `.throughline/` is the workflow state directory created inside bootstrapped projects.
 
 ---
 
@@ -188,7 +225,7 @@ Say "bootstrap the project". The skill:
 
 1. Confirms a git repo exists (offers a plain `git init` if not — no remote, visibility, or license decision imposed on you)
 2. Copies the doc tree, templates, and scripts into the project
-3. Seeds an empty `backlog.json` and generates `AGENTS.md` + `CLAUDE.md` operating manuals
+3. Seeds an empty `backlog.json`, generates canonical `AGENTS.md`, and emits platform pointer files
 4. Installs a pre-commit hook that validates the contract on every commit
 5. Sets up CI (test + lint) if a CI connector is configured
 
@@ -253,7 +290,7 @@ This is the core build cycle. It repeats for every epic, lowest-order unblocked 
 **`define-epic`** expands one epic from the backlog:
 - Reads the chosen epic's stories and their PRD requirements
 - Queries the codegraph index (if present) to map the epic to the affected code symbols
-- Writes a per-story spec (goal, scope, acceptance, invariants) to `.claude/epic-N/`
+- Writes a per-story spec (goal, scope, acceptance, invariants) to `.throughline/epic-N/`
 - Produces a test plan covering unit, integration, and E2E coverage for each story
 - Creates the GitHub epic parent issue and sub-issues (or operates fully offline in local mode)
 
@@ -263,7 +300,7 @@ This is the core build cycle. It repeats for every epic, lowest-order unblocked 
 - Dispatches a fresh sub-agent per story so context stays lean
 - Each sub-agent works in TDD — failing test first, minimum code to pass, refactor
 - Writes `story.verify` (CI result, coverage, commit SHA) back into `backlog.json`
-- Updates the ledger in `.claude/epic-N/ledger.md`
+- Updates the ledger in `.throughline/epic-N/ledger.md`
 - Runs a code-review and security-review self-pass before the story is marked done
 
 **Mid-flight amend:** if building reveals the slice or acceptance is wrong, the skill stops, flags the conflict, and runs `define-backlog` in reconcile mode to amend just the affected stories — then re-gates at G6. Code never silently diverges from the contract.
@@ -381,7 +418,7 @@ node scripts/gate.mjs approve G6 --note "epic plan approved"
 | `define-design` | G3 | `docs/design/` (tokens, primitives, mockups) |
 | `define-architecture` | G4 | `docs/architecture/` (ADRs, data model, API, threat model) |
 | `define-backlog` | G5 | `docs/engineering/backlog.json` |
-| `define-epic` | G6 | `.claude/epic-N/` (specs, test plan, ledger) |
+| `define-epic` | G6 | `.throughline/epic-N/` (specs, test plan, ledger) |
 | `implement-epic` | — | Code, tests, `story.verify` in contract |
 | `ship-epic` | G7 | Merged PR, closed issues, refreshed dashboard |
 | `release` | G8 | Changelog, version tag, deployment, announcement |

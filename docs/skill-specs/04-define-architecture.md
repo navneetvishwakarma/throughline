@@ -15,7 +15,7 @@ design", "write an ADR". Runs in parallel with define-design. Extend just-in-tim
 don't over-design.
 
 ## Context (token protocol)
-Follow the README *Context & token protocol*. Load `CLAUDE.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for data-model/dependency/code lookups and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
+Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for data-model/dependency/code lookups and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
 
 ## Persona(s)
 - **Lead: Architect** — simplest system that meets the requirements and bends under change; boring proven tech by default; reasons in data flows, failure modes, trade-offs.

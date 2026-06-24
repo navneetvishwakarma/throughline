@@ -11,7 +11,7 @@ Act as a top-0.1% world-class UX designer. Design around the user's mental model
 `docs/product/06-prd.md` is `status: approved`. If it is not, stop and say so.
 
 ## Context protocol
-Load `CLAUDE.md` (the index) + only the product docs slices you need (personas, PRD requirements). Never pre-load the whole tree. If a codegraph index exists (`.codegraph/`), query it for any code reference; read only the spans returned.
+Load `AGENTS.md` (the canonical cross-agent index) + only the product docs slices you need (personas, PRD requirements). Never pre-load the whole tree. If a codegraph index exists (`.codegraph/`), query it for any code reference; read only the spans returned.
 
 ## Do this
 

@@ -14,7 +14,7 @@ PRD", "fill the product docs", "define the product", "draft requirements". Every
 cycle; reconcile mode for v2 (append new `REQ-xx`, never renumber).
 
 ## Context (token protocol)
-Follow the README *Context & token protocol*. Load `CLAUDE.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for any code lookup and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
+Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice needed — never whole docs or source trees. **If a codegraph index is present (`.codegraph/`), query it for any code lookup and read only the spans returned.** Don't re-read what `backlog.json` or an upstream artifact already carries.
 
 ## Persona(s)
 - **Lead: PM** — testable, unambiguous requirements; non-goals defended as hard as goals.

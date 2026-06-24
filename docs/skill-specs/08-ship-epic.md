@@ -33,7 +33,7 @@ Follow the README *Context & token protocol*. Work from the epic branch diff + l
 5. **GitHub mode:** push, open PR, wait for CI, merge on G7 approval, close child issues, then sync status.
 
 ## Inputs / Outputs
-- Reads: epic branch, `.claude/ship-<n>/issue-*.json`. Writes: PR, merged code, closed issues; triggers sync + dashboard.
+- Reads: epic branch, `.throughline/ship-<n>/issue-*.json`. Writes: PR, merged code, closed issues; triggers sync + dashboard.
 
 ## Automated gate
 - CI green; deploy-checklist complete; security-review pass (where required); post-merge `validate.mjs` passes.
