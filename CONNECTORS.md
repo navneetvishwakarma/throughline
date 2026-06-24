@@ -7,5 +7,8 @@ Throughline is tool-agnostic. Everything works with no external connector at all
 | Issue tracker | `~~tracker` | GitHub, GitLab, Linear, Jira | No — default is `local` (offline) |
 | Code index | codegraph | codegraph (Claude/Cursor/Codex/Gemini/OpenCode) | No — optional; speeds up code lookups |
 | CI | `~~ci` | GitHub Actions, GitLab CI, etc. | No — enables real `verify.ci` |
+| Workflow accelerators | Superpowers | brainstorming, writing-plans, subagent-driven-development, test-driven-development, root-cause-tracing | No — optional; Throughline falls back to its own plain-language specs |
 
 In `local` mode the backlog IS the tracker: stories are the work items, status is set by the skills, and the dashboard links to the PRD/backlog instead of issues.
+
+Throughline does make use of the Superpowers plugin where available. It is referenced as an optional public add-on for planning, TDD, subagent execution, and debugging flows. It is not required for installation or baseline operation.
