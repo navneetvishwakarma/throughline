@@ -8,7 +8,7 @@ The core is platform-neutral: skills, templates, Node scripts, a backlog contrac
 
 Throughline is public but early.
 
-- Version: `0.1.0`
+- Version: `0.2.0`
 - Install mode: source checkout
 - Published package: not yet
 - Field status: core workflow and bootstrap are implemented; the epic, ship, release, and brownfield flows are written and still need wider field use
@@ -189,6 +189,23 @@ A product is never re-scaffolded for its next release. `define-product`, `define
 - `define-backlog` reconciles once any epic/story carries a tracker issue — append-only, `release: v2` epics, shipped work untouched. In the same write, it advances `backlog.json`'s `release_in_flight` to the new release tag — deliberately not `define-product`'s job, since that would leave the field pointing at a release with no matching epic yet while `define-architecture`/`define-design` run in between, and both validate `backlog.json` as part of their own gates.
 - `measure-learn` (G9) closes the loop: once a release has real usage data, it writes `docs/product/retros/<release>.md` (metrics, ops health, UX debt, and a proceed/pivot/kill decision) that the next `define-brief` reads before starting a new cycle, resolving `<release>` from `release_in_flight` — the one field naming which release is currently being worked, so no skill has to infer it.
 
+## Keeping a Project in Sync
+
+`bootstrap-project`/`adopt-project` run once and copy a snapshot of the plugin's scaffold (`scripts/*.mjs`, `docs/engineering/workflow.md`, `docs/_templates/*`, CI, hooks, `AGENTS.md`) into the project. That snapshot doesn't update itself — a project bootstrapped before a plugin release gained the coverage tooling, the design tier, or `measure-learn` stays frozen at its old version until something explicitly brings it forward.
+
+`upgrade-project` is that something. It reads the currently installed plugin, classifies every platform-owned file in the project as added (new capability the project never had), unchanged, or needs-review (differs — could be normal drift or a deliberate local edit, never assumed), and applies the safe part automatically:
+
+```bash
+node scripts/sync-plugin.mjs                  # report only, writes nothing
+node scripts/sync-plugin.mjs --apply          # write files the project is missing
+node scripts/sync-plugin.mjs --force=a,b      # after reviewing them, accept the plugin's version of just files a and b
+node scripts/sync-plugin.mjs --force          # accept the plugin's version of every flagged file — only once you've reviewed all of them
+```
+
+It never touches `backlog.json`, `.throughline/` working state, or anything already written under `docs/product|architecture|design/` — those are project content, not scaffold, and `place()`'s own idempotency (reused, not reimplemented) is what guarantees that when `upgrade-project` re-runs `init-project.mjs` to materialize newly-added doc-tier files. `.throughline/plugin-version.json` (stamped at bootstrap, updated on every sync) records which plugin version a project is current with.
+
+This is also what makes the cross-platform handoff durable over time, not just at the moment of bootstrap: a project opened in Codex today reads the same `workflow.md` a Claude Code session would, regardless of which platform originally scaffolded it or how long ago.
+
 ## UI/UX
 
 `define-design` (G3) is a staged process, not a single undifferentiated "make mockups" step:
@@ -308,6 +325,7 @@ throughline/
 | `validate-assumption` | G1.5 | run or design the cheapest decisive validation |
 | `bootstrap-project` | none | initialize a new repo with Throughline rails |
 | `adopt-project` | G5 | onboard an existing repo |
+| `upgrade-project` | none | sync an existing project's scaffold to the currently installed plugin version |
 | `define-product` | G2 | write product docs and requirements |
 | `define-design` | G3 | map user journeys, then tokens, wireframes, and mockups |
 | `define-architecture` | G4 | decide stack, data model, API shape, and ADRs |

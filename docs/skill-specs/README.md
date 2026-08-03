@@ -12,7 +12,7 @@ These are **specs for review**, not the skills themselves. Once you're happy wit
 one, pass it to `anthropic-skills:skill-creator` ("create a skill from this spec")
 to generate the actual `SKILL.md`. They all follow the same template so review is
 fast and the pipeline stays consistent. Context: `../workflow-master.md`,
-contract: `../scaffold/docs/engineering/backlog.schema.json`.
+contract: `../../skills/bootstrap-project/assets/docs/engineering/backlog.schema.json`.
 
 ## The skills
 
@@ -31,6 +31,7 @@ contract: `../scaffold/docs/engineering/backlog.schema.json`.
 | 8 | `08-ship-epic.md` | modify existing | Developer | G7 PR merge |
 | 9 | `09-release.md` | new | PM | G8 release approved |
 | 10 | `11-measure-learn.md` | new | PM | G9 retro decision confirmed |
+| 11 | `12-upgrade-project.md` | new | Developer | — (mechanical, per-file review) |
 
 ## Shared template (every spec uses these headings)
 
@@ -90,12 +91,13 @@ prevents the same content being parsed again and again.
 | `.codegraph` index | build/daemon | architecture, define-epic, implement, ship → **query, never file-scan** |
 | `story.verify`, ledger | implement-epic | ship, dashboard |
 | `docs/product/retros/<release>.md` | measure-learn | define-brief → next v2+ gate-in (full, once) |
+| `.throughline/plugin-version.json` | bootstrap-project (initial stamp), upgrade-project (updates) | any skill/doctor check wanting to know if the project is behind the installed plugin |
 
 ## Other shared conventions
 
 - Personas' full descriptions live in `../workflow-master.md`; specs name lead/supporting only.
 - Contract = `docs/engineering/backlog.json` (schema v2); gate approvals live in `.throughline/gates.json`; field ownership + status enum in
-  `../scaffold/docs/engineering/workflow.md` — never violate.
+  `../../skills/bootstrap-project/assets/docs/engineering/workflow.md` — never violate.
 - Persona conflicts → **surface at the human gate**, never resolve silently.
 - Every skill ends with the repo in a `validate.mjs`-passing state.
 - **Reuse skills are optional accelerators.** Each spec is followable as plain instructions; if a named skill isn't installed (or the agent isn't Claude), perform the step directly from the spec. The **spec is the source of truth; the skill is a shortcut.** This keeps the workflow runnable by any coding agent.
