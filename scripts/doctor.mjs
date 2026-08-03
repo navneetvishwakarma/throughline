@@ -92,7 +92,7 @@ function readDir(path) {
 }
 
 function checkScriptSyntax() {
-  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs']) {
+  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs', 'sync-plugin.mjs']) {
     run(root, [process.execPath, '--check', join(assetsRoot, 'scripts', script)]);
   }
 }
@@ -149,6 +149,11 @@ function checkScaffold() {
     const coverage = run(tmp, [process.execPath, join(tmp, 'scripts/coverage.mjs'), '--json']);
     const coverageSummary = JSON.parse(coverage.stdout || '{}');
     if (coverageSummary.status !== 'skipped') fail('coverage.mjs should report "skipped" against a fixture with no product code (got ' + coverageSummary.status + ')');
+
+    const sync = run(tmp, [process.execPath, join(tmp, 'scripts/sync-plugin.mjs'), '--from=' + root]);
+    if (!/added:\s+\(none\)/.test(sync.stdout) || !/unchanged: \d+ file/.test(sync.stdout) || /needs review/.test(sync.stdout)) {
+      fail('sync-plugin.mjs against a freshly-scaffolded fixture should report nothing added, everything unchanged, no needs-review — the allowlist or AGENTS.md rendering has drifted from what init-project.mjs actually produces:\n' + sync.stdout);
+    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

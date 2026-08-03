@@ -536,3 +536,130 @@ test('skill eval set covers production workflow risks', () => {
     assert.ok(item.assertions.length >= 3);
   }
 });
+
+test('sync-plugin.mjs reports a fresh scaffold as fully unchanged and writes nothing by default', () => {
+  const root = makeProject('sync-fresh');
+  try {
+    const result = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /unchanged: \d+ file/);
+    assert.doesNotMatch(result.stdout, /needs review/);
+    assert.equal(existsSync(join(root, '.throughline/plugin-version.json')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs --apply adds a missing scaffold file and stamps plugin-version.json', () => {
+  const root = makeProject('sync-missing');
+  try {
+    rmSync(join(root, 'scripts/coverage.mjs'));
+    const report = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot]);
+    assert.match(report.stdout, /added:\s+scripts\/coverage\.mjs/);
+    assert.equal(existsSync(join(root, 'scripts/coverage.mjs')), false, 'report-only mode must not write files');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(existsSync(join(root, 'scripts/coverage.mjs')), true);
+
+    const versionPath = join(root, '.throughline/plugin-version.json');
+    assert.equal(existsSync(versionPath), true);
+    const version = JSON.parse(readFileSync(versionPath, 'utf8'));
+    const pluginPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+    assert.equal(version.version, pluginPkg.version);
+    assert.ok(version.syncedAt);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs never overwrites a locally-edited scaffold file without --force, and withholds the version stamp while it is unresolved', () => {
+  const root = makeProject('sync-edited');
+  try {
+    const workflowPath = join(root, 'docs/engineering/workflow.md');
+    const original = readFileSync(workflowPath, 'utf8');
+    writeFileSync(workflowPath, original + '\n<!-- project-specific note, do not clobber -->\n', 'utf8');
+
+    const report = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.match(report.stdout, /needs review/);
+    assert.match(readFileSync(workflowPath, 'utf8'), /project-specific note/, '--apply alone must not touch a file that differs');
+
+    const version = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+    assert.equal(version.version, null, 'must not claim the project is current while a file is still unresolved');
+    assert.ok(version.pendingReview.includes('docs/engineering/workflow.md'));
+
+    const forced = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--force']);
+    assert.equal(forced.status, 0, forced.stderr || forced.stdout);
+    assert.doesNotMatch(readFileSync(workflowPath, 'utf8'), /project-specific note/, '--force should accept the plugin\'s version for a flagged file');
+
+    const versionAfter = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+    const pluginPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+    assert.equal(versionAfter.version, pluginPkg.version, 'once every flagged file is resolved, the stamp should claim the current version');
+    assert.deepEqual(versionAfter.pendingReview, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs --force=<path> resolves only the named file, leaving other flagged files untouched', () => {
+  const root = makeProject('sync-scoped-force');
+  try {
+    const workflowPath = join(root, 'docs/engineering/workflow.md');
+    const schemaPath = join(root, 'docs/engineering/backlog.schema.json');
+    writeFileSync(workflowPath, readFileSync(workflowPath, 'utf8') + '\n<!-- keep me -->\n', 'utf8');
+    writeFileSync(schemaPath, readFileSync(schemaPath, 'utf8').replace('{', '{\n  "_note": "keep me too",'), 'utf8');
+
+    const scoped = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--force=docs/engineering/workflow.md']);
+    assert.equal(scoped.status, 0, scoped.stderr || scoped.stdout);
+    assert.doesNotMatch(readFileSync(workflowPath, 'utf8'), /keep me/, 'the named file should be overwritten');
+    assert.match(readFileSync(schemaPath, 'utf8'), /keep me too/, 'a flagged file not named in --force= must survive untouched');
+    assert.match(scoped.stdout, /needs review/, 'the unresolved schema file should still be reported');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs refreshes an already-installed git pre-commit hook when .githooks/pre-commit changes', () => {
+  const root = makeProject('sync-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    writeFileSync(hookPath, '#!/bin/sh\necho stale hook\n', 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const refreshed = readFileSync(hookPath, 'utf8');
+    assert.equal(refreshed, readFileSync(join(root, '.githooks/pre-commit'), 'utf8'), 'the live hook should now match .githooks/pre-commit');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs restores a deleted backlog.seed.json so a re-run of init-project.mjs does not crash', () => {
+  const root = makeProject('sync-seed');
+  try {
+    rmSync(join(root, 'docs/engineering/backlog.seed.json'));
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(existsSync(join(root, 'docs/engineering/backlog.seed.json')), true);
+
+    const rerun = runNode(root, join(root, 'scripts/init-project.mjs'), ['Fixture']);
+    assert.equal(rerun.status, 0, rerun.stderr || rerun.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs regenerates AGENTS.md preserving the project name already in it', () => {
+  const root = makeProject('sync-agents');
+  try {
+    const agentsPath = join(root, 'AGENTS.md');
+    assert.match(readFileSync(agentsPath, 'utf8'), /^# Fixture — Agent Operating Manual/m);
+    const result = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot]);
+    assert.doesNotMatch(result.stdout, /needs review.*AGENTS\.md|AGENTS\.md.*needs review/s);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

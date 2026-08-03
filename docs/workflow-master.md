@@ -45,6 +45,7 @@ gate** rather than silently resolving it.
 | 0.5 validate-assumption | PM | Architect/Developer (tech spike), UX (user test) |
 | 1 bootstrap-project | — (mechanical) | — |
 | 1b adopt-project (brownfield) | Architect | PM, Developer, Security |
+| 1c upgrade-project (scaffold sync) | Developer | — (mechanical) |
 | 2 define-product (PRD) | PM | UX (user lens), Security (PII/compliance flags) |
 | 3 define-design | UX | PM (scope), Developer (feasibility) |
 | 4 define-architecture | Architect | Security (threat model), Developer (implementability) |
@@ -106,7 +107,12 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **👤 gate:** none (mechanical). *Note:* the codegraph index is empty until code lands — it fills in from implement-epic onward.
 
 ### 1b · `adopt-project` — onboard an existing repo *(brownfield, replaces step 1)*
-- **Mode:** first cycle for an existing codebase. Audits, stands up the rails, builds the codegraph index, and reconciles existing work into one `backlog.json` (status seeded from ledgers/commits, not stale tracker state). Also audits coverage tooling (`scripts/coverage.mjs --json`) and, if missing, offers `--setup` before install/commit — never silently. Spec: `skill-specs/10-adopt-project.md`. Gate: **G5 (adopt)**.
+- **Mode:** first cycle for an existing codebase. Audits, stands up the rails, builds the codegraph index, and reconciles existing work into one `backlog.json` (status seeded from ledgers/commits, not stale tracker state). Also audits coverage tooling (`scripts/coverage.mjs --json`) and, if missing, offers `--setup` before install/commit — never silently. Also flags real UI shipped with no `docs/design/` journeys/screens, so `define-design`'s seed pass documents it rather than inventing flows. Spec: `skill-specs/10-adopt-project.md`. Gate: **G5 (adopt)**.
+
+### 1c · `upgrade-project` — keep an existing project's scaffold current *(run any time, not tied to a release)*
+- **Mode:** whenever the installed plugin is newer than the project's `.throughline/plugin-version.json` — a project bootstrapped months ago doesn't auto-upgrade; this is the explicit, mechanical way to bring its `scripts/*.mjs`, `docs/engineering/workflow.md`, `docs/_templates/*`, CI, hooks, and `AGENTS.md` up to date without touching `backlog.json`, `.throughline/` working state, or already-written product/architecture/design docs.
+- **Does:** `node scripts/sync-plugin.mjs` (report: added / unchanged / needs-review) → `--apply` (writes only the missing files) → human resolves each **needs-review** file individually before `--force` touches it → re-run `init-project.mjs` (idempotent — only materializes new doc-tier files) → `validate.mjs` (confirms the project's real `backlog.json` still holds under whatever landed) → `.throughline/plugin-version.json` updated.
+- **Why it matters for cross-platform handoff:** without this, "any agent can pick up where another left off" is only true at the moment of bootstrap. This is what keeps it true afterward — a project opened in Codex today reads the same current `workflow.md` regardless of which platform originally scaffolded it months ago. Spec: `skill-specs/12-upgrade-project.md`. Gate: none (mechanical; per-file human review substitutes for a numbered gate).
 
 ### 2 · `define-product` — the PRD
 - **Mode:** seed if `06-prd.md` isn't `approved` yet (covers brownfield repos `adopt-project` brought on without ever running this skill); reconcile once it is (append new `REQ-xx`, never renumber — see the reconcile-rules table in the skill spec). `release_in_flight` is **not** touched here — `define-backlog` advances it (see step 5) so the field never disagrees with `epics[].release` while step 3/4 run `validate.mjs` in between.
@@ -200,6 +206,7 @@ Everything else — generation, validation, slicing mechanics, tests, sync, dash
 ## First cycle vs every cycle
 
 - **First cycle only:** `bootstrap-project` (new repo) **or** `adopt-project` (existing repo).
+- **Run any time, independent of the release cycle:** `upgrade-project` — syncs a project's scaffold to the currently installed plugin version. Not part of the idea-to-release loop; it's what keeps a project from drifting behind the plugin between cycles.
 - **When the bet is risky:** `validate-assumption` (after the brief, before the PRD).
 - **Every cycle, full first time then reconcile — with a real, mechanical seed/reconcile trigger, not just a label:** define-product (`06-prd.md` not-approved vs. approved — deliberately independent of `backlog.json`, so a brownfield `adopt-project` populating `epics[]` first can't put this skill in the wrong mode), define-design (design tier README not-approved vs. approved), define-architecture (`01-system-overview.md` not-approved vs. approved — reconcile means an architecture *review*, not a redesign), define-backlog (`gh_issue` absent vs. present anywhere).
 - **Every cycle, unchanged:** define-epic → implement → ship → release.
@@ -287,6 +294,7 @@ Claude built-in command). **Public add-on** = install separately.
 | 0.5 validate-assumption | `product-management:product-brainstorming`, `design:user-research`, `engineering:system-design`/`debug` | Superpowers › writing-plans |
 | 1 bootstrap-project | `anthropic-skills:skill-creator` (build the pipeline skills), `anthropic-skills:schedule` (digest task) | Superpowers › using-git-worktrees |
 | 1b adopt-project | `engineering:tech-debt`, `engineering:system-design`, `product-management:roadmap-update` | — |
+| 1c upgrade-project | none — dependency-free like the rest of the automation layer | — |
 | 2 define-product | `product-management:write-spec`, `:synthesize-research`, `marketing:competitive-brief`, `design:user-research`, `anthropic-skills:doc-coauthoring` | product-tracking-skills (analytics business case) |
 | 3 define-design | `design:design-critique`, `:accessibility-review`, `:design-system`, `:ux-copy`, `anthropic-skills:canvas-design`, `theme-factory`, `web-artifacts-builder`, `brand-guidelines` | miro › miro-diagram (optional polish for journey diagrams — the journey itself is now a first-party deliverable, not gated on this) |
 | 4 define-architecture | `engineering:system-design`, `:architecture` (ADR), `:testing-strategy`, `data:explore-data`/`sql-queries`, built-in `security-review` | miro › miro-code-spec; vanta (if SOC2/compliance) |

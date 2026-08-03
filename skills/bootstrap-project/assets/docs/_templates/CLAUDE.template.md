@@ -25,10 +25,11 @@ workflow skills in local mode — never hand-edit it casually.**
 
 ## Workflow
 
-define → implement → ship. Rules, Definition of Ready/Done, and the human approval
-gates are in `docs/engineering/workflow.md`. **Stops:** the PRD must be
-`status: approved` before backlog seeding; the epic plan gets a human glance before
-implementation.
+Idea → define → implement → ship → release → measure → loop. Nine gates (G1–G9),
+field ownership, the status enum, and Definition of Ready/Done are all in
+`docs/engineering/workflow.md` — that file, not this one, is authoritative for gate
+detail. Check where the project actually stands with `node scripts/gate.mjs list`;
+never assume a gate is clear from how a doc reads.
 
 ## Doc map
 
@@ -42,7 +43,9 @@ implementation.
 ```
 node scripts/validate.mjs         # validate the contract (run before commit/build)
 node scripts/gate.mjs check G6    # verify a human gate before proceeding
+node scripts/gate.mjs list        # show every gate's approval state
 node scripts/sync-status.mjs      # update local/GitHub status into the contract
+node scripts/coverage.mjs --check # verify coverage against threshold
 node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (zero tokens)
 ```
 
@@ -50,3 +53,11 @@ node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (zero tokens)
 
 `.throughline/epic-<n>/` (epic.json, sub-<n>.json, ledger.md) and `.throughline/ship-<n>/issue-<n>.json`
 are owned by the skills. Do not hand-edit them.
+
+## Any agent can pick this up
+
+This file, `docs/engineering/backlog.json`, `docs/engineering/workflow.md`, and
+`.throughline/gates.json` are the complete portable state of the project — plain,
+platform-neutral files tracked in git. Claude Code, Codex, Antigravity, or any other
+agent reads the same four things and gets the same answer for what's done, what's
+next, and what's approved. There is no separate hand-off step between platforms.
