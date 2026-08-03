@@ -55,6 +55,18 @@
         { "text": "Names supported trackers as local and github." },
         { "text": "Does not create fake issue mappings or silently continue." }
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Adopt an existing Node repo that already has real application code and a test suite, but no coverage tool configured. `backlog.json` has `coverage.mode: enforce` once seeded. Implement a story and then try to ship the epic.",
+      "expected_output": "adopt-project's audit flags coverage tooling as missing and names the recommended tool for the detected stack, offering `coverage.mjs --setup` rather than silently proceeding as if the repo were covered. implement-epic measures coverage by running `scripts/coverage.mjs` instead of inventing a number, and ship-epic refuses to land the epic while coverage is still `needs_setup` or below `coverage.min`.",
+      "files": [],
+      "assertions": [
+        { "text": "adopt-project's audit explicitly reports missing coverage tooling rather than omitting it." },
+        { "text": "Does not hand-type a `verify.coverage` number anywhere — always calls `node scripts/coverage.mjs`." },
+        { "text": "Asks before installing a new devDependency (via `--setup`) rather than installing silently." },
+        { "text": "ship-epic blocks the merge when `node scripts/coverage.mjs --check --reuse` fails or reports `needs_setup`." }
+      ]
     }
   ]
 }

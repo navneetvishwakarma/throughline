@@ -21,12 +21,14 @@ _Explicitly out of scope._
 
 > Every requirement carries a stable `REQ-xx` ID. Backlog stories reference these
 > IDs via `prd_ref`, which is what makes "is requirement X built and tested?"
-> answerable by script. Never renumber a shipped requirement.
+> answerable by script. Never renumber a shipped requirement. `Release` tags which
+> version wave a requirement belongs to (`v1`, `v2`, ...) — a v2+ change to a shipped
+> requirement gets a NEW row tagged to the new release; the shipped row is never edited.
 
-| ID | Requirement | Priority | Acceptance |
-|------|-------------|----------|------------|
-| REQ-01 | … | P0 | … |
-| REQ-02 | … | P1 | … |
+| ID | Requirement | Priority | Acceptance | Release |
+|------|-------------|----------|------------|---------|
+| REQ-01 | … | P0 | … | v1 |
+| REQ-02 | … | P1 | … | v1 |
 
 ## Success metrics
 

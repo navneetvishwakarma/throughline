@@ -18,6 +18,7 @@ if (data.schema !== 2) err('schema must be 2 (got ' + JSON.stringify(data.schema
 if (!data.project) err('project is required');
 if (!data.prd) err('prd path is required');
 if (data.tracker && !TRACKERS.includes(data.tracker)) err("tracker must be one of " + TRACKERS.join('|') + " (got " + JSON.stringify(data.tracker) + ")");
+if (data.release_in_flight && (data.epics || []).length && !(data.epics || []).some((e) => e.release === data.release_in_flight)) err('release_in_flight ' + JSON.stringify(data.release_in_flight) + ' does not match any epics[].release');
 if (!Array.isArray(data.epics)) err('epics must be an array');
 if (!Array.isArray(data.stories)) err('stories must be an array');
 if ((data.stories || []).length) {
@@ -58,6 +59,11 @@ const ids = new Set();
   if (typeof s.order !== 'number') err(at + ': order must be a number');
   if (!Array.isArray(s.blocked_by)) err(at + ': blocked_by must be an array');
   if (s.status === 'done' && (s.verify?.ci !== 'pass' || !s.verify?.commit)) err(at + ': done stories require verify.ci pass and verify.commit');
+  if (s.status === 'done' && data.coverage?.mode === 'enforce') {
+    const min = data.coverage.min ?? 0.7;
+    if (s.verify?.coverage == null) err(at + ': done stories require verify.coverage (coverage.mode is enforce) — run node scripts/coverage.mjs --story ' + s.id);
+    else if (s.verify.coverage < min) err(at + ': verify.coverage ' + s.verify.coverage + ' is below coverage.min ' + min);
+  }
 });
 (data.stories || []).forEach((s) => {
   (s.blocked_by || []).forEach((dep) => {

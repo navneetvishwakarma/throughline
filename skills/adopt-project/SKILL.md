@@ -17,12 +17,14 @@ Audit via section reads and the codegraph query, not whole-tree reads. **If no c
 
 1. **Audit** — detect and report what's already present:
    - Docs tier: product docs, PRD, architecture, design, backlog files.
+   - Design assets: does the repo already render real UI (pages/screens/components) with no `docs/design/` journeys or screens documenting it? Report ✓ design docs present / ✗ real UI exists but undocumented — this flag matters because `define-design` will otherwise start in seed mode and try to *invent* journeys for a product that already has real, shipped flows.
    - Tracker: `.throughline/ship-*/`, `.throughline/epic-*/`, GitHub issues, roadmap/progress files.
    - CI, pre-commit hooks, codegraph index.
+   - Coverage tooling: run `node scripts/coverage.mjs --json` once code exists — report ✓ `<tool>` configured / ✗ none detected for `<stack>`.
    - Security surfaces: auth/PII/secrets already in the codebase (flag for the security lens).
    Print a one-page audit: ✓ present / ✗ missing per item.
 
-2. **Rails** — run `node scripts/init-project.mjs "<name>"` (non-destructive: never overwrites existing files). Add `AGENTS.md` plus platform pointer files, pre-commit hook (`node scripts/validate.mjs`), and CI config if a CI connector is present. Build or refresh the codegraph index.
+2. **Rails** — run `node scripts/init-project.mjs "<name>"` (non-destructive: never overwrites existing files). Add `AGENTS.md` plus platform pointer files, pre-commit hook (`node scripts/validate.mjs`), and CI config if a CI connector is present. Build or refresh the codegraph index. If the audit flagged missing coverage tooling for a repo that already has code, run `node scripts/coverage.mjs --setup`, present the diff, and ask before installing the new dependency or committing — never install silently.
 
 3. **Contract** — reconcile existing work into `docs/engineering/backlog.json`:
    - Existing tracker items (GH epic issues + sub-issues, roadmap slices) → epics + stories with `gh_issue` where relevant.

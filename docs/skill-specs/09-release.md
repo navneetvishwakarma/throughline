@@ -54,8 +54,7 @@ Follow the README *Context & token protocol*. Build the changelog from the `back
 - Any release epic not `done` → block. Deploy/checklist failure → halt, invoke incident-response rollback. Security finding → block go.
 
 ## Note — measure & learn (step 10)
-Not a separate gated skill but the loop-closer; can live inside `release` or as a
-small `measure-learn` skill. Reuse `product-management:metrics-review` +
-`:synthesize-research`, `data:analyze`/`build-dashboard`, `design:research-synthesis`,
-and **`engineering:incident-response`** for post-release ops health (errors/latency/incidents).
-Ends in a **proceed / pivot / kill** decision that feeds the next `define-brief` (reconcile mode).
+A separate, lightly-gated skill — see `docs/skill-specs/11-measure-learn.md` (**G9**).
+`release` hands off; it doesn't run the retro itself, since real usage data doesn't
+exist yet at ship time. `measure-learn` is invoked independently once there's
+something to measure, and its recorded decision feeds the next `define-brief`.

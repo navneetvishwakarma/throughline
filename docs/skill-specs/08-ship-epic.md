@@ -26,17 +26,18 @@ Follow the README *Context & token protocol*. Work from the epic branch diff + l
 - Public add-on (optional): qodo › qodo-pr-resolver (address PR comments); vanta › test-remediation (compliance).
 
 ## Required changes (delta)
-1. **Auto-sync after merge:** on issue close, run `node scripts/sync-status.mjs` then `node scripts/build-dashboard.mjs` so the contract + dashboard reflect reality without manual steps.
-2. Confirm `sync-status` flipped the shipped stories to `done` (status is its job, not ship's — ship just closes the GH issues that drive it).
-3. Run `security-review` as a **hard, mandatory** gate for any PR touching auth / OAuth scopes / PII — it can block the merge. (Resolved: no longer advisory.)
-4. **Local mode (no remote/tracker):** there's no PR — G7 becomes a local `git diff` review; on approval, merge the branch to main and the skill writes the shipped stories to `done` in the backlog directly (local status adapter), then runs `build-dashboard`. No remote, no issues, no network.
-5. **GitHub mode:** push, open PR, wait for CI, merge on G7 approval, close child issues, then sync status.
+1. **Coverage gate-in:** when `backlog.json`'s `coverage.mode` is `enforce`, run `node scripts/coverage.mjs --check --reuse` before either mode's merge step (Mode A: before presenting G7 review; Mode B: alongside the branch quality gate). `--reuse` validates the summary implement-epic already wrote rather than re-running the full suite. If it fails: stop, send back to `implement-epic`.
+2. **Auto-sync after merge:** on issue close, run `node scripts/sync-status.mjs` then `node scripts/build-dashboard.mjs` so the contract + dashboard reflect reality without manual steps.
+3. Confirm `sync-status` flipped the shipped stories to `done` (status is its job, not ship's — ship just closes the GH issues that drive it).
+4. Run `security-review` as a **hard, mandatory** gate for any PR touching auth / OAuth scopes / PII — it can block the merge. (Resolved: no longer advisory.)
+5. **Local mode (no remote/tracker):** there's no PR — G7 becomes a local `git diff` review; on approval, merge the branch to main and the skill writes the shipped stories to `done` in the backlog directly (local status adapter), then runs `build-dashboard`. No remote, no issues, no network.
+6. **GitHub mode:** push, open PR, wait for CI, merge on G7 approval, close child issues, then sync status.
 
 ## Inputs / Outputs
 - Reads: epic branch, `.throughline/ship-<n>/issue-*.json`. Writes: PR, merged code, closed issues; triggers sync + dashboard.
 
 ## Automated gate
-- CI green; deploy-checklist complete; security-review pass (where required); post-merge `validate.mjs` passes.
+- CI green; deploy-checklist complete; security-review pass (where required); coverage gate-in passed when `coverage.mode: enforce`; post-merge `validate.mjs` passes.
 
 ## Human gate — G7
 - User reviews the PR and approves the merge (per-epic quality gate).

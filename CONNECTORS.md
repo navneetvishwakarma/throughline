@@ -7,6 +7,7 @@ Throughline is tool-agnostic. Everything works with no external connector at all
 | Issue tracker | `~~tracker` | GitHub, GitLab, Linear, Jira | No — default is `local` (offline) |
 | Code index | codegraph | codegraph (Claude/Cursor/Codex/Gemini/OpenCode) | No — optional; speeds up code lookups |
 | CI | `~~ci` | GitHub Actions, GitLab CI, etc. | No — enables real `verify.ci` |
+| Coverage reporting platform | — | SonarQube / SonarCloud, Codecov | No — not built yet. `scripts/coverage.mjs` already produces each stack's standard report (lcov / cobertura xml / JaCoCo xml / Go cover profile) as a durable artifact (uploaded by CI), so pointing one of these at it later needs no throughline change — just a connector implementation. |
 | Workflow accelerators | Superpowers | brainstorming, writing-plans, subagent-driven-development, test-driven-development, root-cause-tracing | No — optional; Throughline falls back to its own plain-language specs |
 
 In `local` mode the backlog IS the tracker: stories are the work items, status is set by the skills, and the dashboard links to the PRD/backlog instead of issues.

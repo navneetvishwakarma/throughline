@@ -29,7 +29,8 @@ Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice 
 - For v2+: `docs/product/07-success-metrics.md` outcomes, any research notes.
 
 ## Gate-in
-- None — this is the entry point. (For v2: the previous release's measure-and-learn output should exist.)
+- **Mode trigger:** if `docs/engineering/backlog.json` doesn't exist yet, this is cycle 1 — none of the below applies.
+- v2+ (backlog.json exists): resolve `<release>` from its `release_in_flight` field and require `docs/product/retros/<release>.md` to exist with `status: recorded` (written by `measure-learn`, G9). `kill` stops here without an explicit user override; `proceed`/`pivot` both ground this brief in the retro rather than starting blank.
 
 ## Procedure
 1. Interview the user with the PM persona until five things are crisp; do not pad.

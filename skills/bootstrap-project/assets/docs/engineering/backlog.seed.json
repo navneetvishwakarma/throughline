@@ -2,6 +2,8 @@
   "schema": 2,
   "project": "<PROJECT_NAME>",
   "prd": "docs/product/06-prd.md",
+  "release_in_flight": "v1",
+  "coverage": { "min": 0.7, "mode": "warn" },
   "phases": [],
   "epics": [],
   "stories": []

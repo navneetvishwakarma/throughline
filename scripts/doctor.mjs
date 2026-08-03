@@ -92,7 +92,7 @@ function readDir(path) {
 }
 
 function checkScriptSyntax() {
-  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs']) {
+  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs']) {
     run(root, [process.execPath, '--check', join(assetsRoot, 'scripts', script)]);
   }
 }
@@ -145,6 +145,10 @@ function checkScaffold() {
     run(tmp, [process.execPath, join(tmp, 'scripts/gate.mjs'), 'check', 'G6']);
     run(tmp, [process.execPath, join(tmp, 'scripts/build-dashboard.mjs')]);
     if (!existsSync(join(tmp, 'PROGRESS_DASHBOARD.html'))) fail('dashboard was not generated');
+
+    const coverage = run(tmp, [process.execPath, join(tmp, 'scripts/coverage.mjs'), '--json']);
+    const coverageSummary = JSON.parse(coverage.stdout || '{}');
+    if (coverageSummary.status !== 'skipped') fail('coverage.mjs should report "skipped" against a fixture with no product code (got ' + coverageSummary.status + ')');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

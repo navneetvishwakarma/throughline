@@ -12,6 +12,7 @@
     "tagline": { "type": "string" },
     "repo": { "type": "string", "description": "Repo base URL for deep-linking issues (only when a remote tracker is used)." },
     "tracker": { "enum": ["local", "github"], "default": "local", "description": "Optional issue-tracker mirror. Default 'local' = offline, no account: stories are the work items, status set by the skills, dashboard links to PRD/backlog. GitHub mirrors via the sync adapter." },
+    "release_in_flight": { "type": "string", "description": "Names the release currently being worked (e.g. 'v1', 'v2'). Written by define-product when it advances to a new reconcile pass; read by measure-learn (names the retro file) and the next define-brief (resolves which retro to check). Freeform, matches epics[].release." },
     "health": {
       "type": "object", "additionalProperties": false,
       "description": "Optional schedule verdict shown on the dashboard (behind/ahead needs a schedule, so it is set, not derived).",
@@ -22,6 +23,16 @@
       }
     },
     "prd": { "type": "string", "description": "Path to the PRD that REQ ids resolve against." },
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional code-coverage gate. Absence of this key means no enforcement (backward-compatible with installs that predate this feature).",
+      "properties": {
+        "min": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.7, "description": "Minimum aggregate line coverage required when mode is 'enforce'." },
+        "mode": { "enum": ["off", "warn", "enforce"], "default": "warn", "description": "off = ignored; warn = measured and reported, never blocks; enforce = blocks done stories/ship-epic/CI below min." },
+        "command": { "type": "string", "description": "Override: exact command to run instead of stack auto-detection." },
+        "stacks": { "type": "array", "items": { "type": "string" }, "description": "Override: restrict detection to these stack ids (e.g. for a monorepo)." }
+      }
+    },
     "phases": {
       "type": "array",
       "items": { "type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "order": { "type": "integer" } } }
@@ -61,6 +72,7 @@
         "order": { "type": "integer" },
         "estimate": { "type": "number" },
         "acceptance": { "type": "string", "minLength": 1 },
+        "design_ref": { "type": "string", "description": "Optional path to the docs/design/screens/*.md this story implements (e.g. docs/design/screens/S-08-flight-form.md). One screen per story — a story needing several is a signal to split it. Set by define-backlog when a screen doc exists; read by define-epic into the story's acceptance criteria." },
         "verify": {
           "type": "object", "additionalProperties": false,
           "properties": { "ci": { "enum": ["pass", "fail", "pending", "none"] }, "coverage": { "type": "number", "minimum": 0, "maximum": 1 }, "commit": { "type": "string" } }
