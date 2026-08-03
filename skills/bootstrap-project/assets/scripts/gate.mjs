@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 const root = process.cwd();
 const gatePath = join(root, '.throughline/gates.json');
-const gates = ['G1', 'G1.5', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8'];
+const gates = ['G1', 'G1.5', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'];
 const [cmd, rawGate, ...rest] = process.argv.slice(2);
 
 function usage() {

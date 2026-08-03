@@ -31,9 +31,12 @@ For each child story of the chosen epic, write a per-story spec in `.throughline
   "acceptance": "<testable acceptance from backlog.json or elaborated>",
   "invariants": ["<invariant>"],
   "prd_ref": "<REQ-xx>",
-  "adr_ref": "<ADR file if relevant>"
+  "adr_ref": "<ADR file if relevant>",
+  "design_ref": "<docs/design/screens/*.md if backlog.json set one, else omit>"
 }
 ```
+
+If `design_ref` is set, fold the referenced screen's approved layout/states/microcopy into `acceptance` — "matches the approved screen doc" is part of what makes the story done, not a separate untracked expectation.
 
 ## Step 3 — Test plan
 

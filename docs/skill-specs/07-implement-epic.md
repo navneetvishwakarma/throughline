@@ -27,7 +27,7 @@ Follow the README *Context & token protocol*. Work from the sub-issue spec + led
 - Public add-on (recommended): Superpowers › test-driven-development, root-cause-tracing; qodo › qodo-pr-resolver.
 
 ## Required changes (delta)
-1. **Verification evidence into the contract:** after a story's tests pass in CI, write `story.verify = { ci, coverage, commit }` in `backlog.json`. Do **not** set `status` (sync owns it — status flips when the GH issue closes at ship).
+1. **Verification evidence into the contract:** after a story's tests pass in CI, write `story.verify = { ci, commit }` in `backlog.json`, then run `node scripts/coverage.mjs --story <id>` to patch `verify.coverage` from a real, measured run — never hand-type it. If `coverage.mjs` reports `needs_setup` (no coverage tool configured for the detected stack), surface that to the human rather than proceeding as if covered. Do **not** set `status` (sync owns it — status flips when the GH issue closes at ship).
 2. Update `.throughline/epic-<n>/ledger.md` per story (files, tests, commit, risks) as today.
 3. Run code-review + security-review self-passes before opening/marking a story ready.
 4. Keep each change scoped to one story; no cross-story drift.
@@ -38,7 +38,7 @@ Follow the README *Context & token protocol*. Work from the sub-issue spec + led
 - Reads: `.throughline/epic-<n>/*`, codebase. Writes: code + tests; ledger; `story.verify` fields.
 
 ## Automated gate
-- Tests pass, lint clean, code-review + security-review self-pass, `verify.ci: pass` recorded.
+- Tests pass, lint clean, code-review + security-review self-pass, `verify.ci: pass` recorded, `node scripts/coverage.mjs --check` passes (or is warn-only / `needs_setup` was flagged), and for any story with a `design_ref` the implementation is visually compared against its approved screen doc with deviations flagged.
 
 ## Human gate
 - None here — human review happens at ship (G7).

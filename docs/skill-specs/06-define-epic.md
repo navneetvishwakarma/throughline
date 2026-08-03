@@ -29,7 +29,7 @@ Follow the README *Context & token protocol*. Read only the chosen epic's storie
 ## Required changes (delta)
 1. **Read pickup from the contract:** select the next epic from `docs/engineering/backlog.json` (lowest `order`, deps satisfied) instead of a pasted-in story.
 2. **Write back:** after creating GH issues, write `epic.gh_issue` (parent) and each story's `gh_issue` (sub-issue) into `backlog.json`. Do **not** touch `status`.
-3. **Per-story spec** for each child story: goal, in/out scope, acceptance, invariants, spec references (PRD `REQ-xx`, ADRs).
+3. **Per-story spec** for each child story: goal, in/out scope, acceptance, invariants, spec references (PRD `REQ-xx`, ADRs, and `design_ref` when `backlog.json` set one). When `design_ref` is present, fold the approved screen's layout/states/microcopy into `acceptance` rather than leaving it as an untracked expectation.
 4. **Test plan** for the epic (via `engineering:testing-strategy`): what unit/integration/E2E covers each story's acceptance.
 5. Keep emitting `.throughline/epic-<n>/` (epic.json, sub-<n>.json, ledger.md, test-plan.md) as today.
 6. **Local mode (`tracker: local`, the default):** skip all issue creation — the stories ARE the work items, `gh_issue` stays `null`, the specs live in `.throughline/epic-<n>/`, and status is tracked in the backlog. No account or network needed.

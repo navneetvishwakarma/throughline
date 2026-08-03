@@ -28,7 +28,9 @@ dashboard and never stored.
 |-------|-------|-------|
 | `epics[]` scope; story `id`, `title`, `epic`, `order`, `prd_ref`, `acceptance`, `blocked_by` | human + define-backlog | The plan. |
 | `epics[].gh_issue`, `stories[].gh_issue` | define-epic / ship | Written back after the GH issue is created. |
-| story `status`, `verify` | status adapter + implement/ship evidence | Local mode is written by workflow skills; GitHub mode is mirrored from issue state. |
+| story `status` | status adapter | Local mode is written by workflow skills; GitHub mode is mirrored from issue state. |
+| story `verify.ci`, `verify.commit` | implement-epic | Written after the agent's own test run passes. |
+| story `verify.coverage` | `scripts/coverage.mjs`, invoked by implement-epic | Never hand-typed — patched from the measured summary via `--story <id>`. |
 | epic status / progress | derived | Computed by the dashboard from child stories. Never stored. |
 
 ## Definition of Ready (a story may be picked up only if)
@@ -43,6 +45,7 @@ dashboard and never stored.
 
 - In GitHub mode, its issue is CLOSED. In local mode, `ship-epic` marks it done.
 - Acceptance criteria met; tests for the change pass (`verify.ci: pass`).
+- Repo coverage meets `coverage.min` when `coverage.mode: enforce` (measured by `scripts/coverage.mjs`, repo-wide — not yet scoped to just the story's own changed files).
 - The epic ledger (`.throughline/epic-<n>/ledger.md`) records files, tests, commit.
 
 ## Human approval gates (the agent stops here)

@@ -150,6 +150,113 @@ test('gate script persists approval state and blocks missing approvals', () => {
   }
 });
 
+test('gate script recognizes G9 (measure-learn) alongside the existing gates', () => {
+  const root = makeProject('gate-g9');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+
+    const list = runNode(root, gateScript, ['list']);
+    assert.equal(list.status, 0, list.stderr || list.stdout);
+    assert.match(list.stdout, /G9: pending/);
+
+    const approve = runNode(root, gateScript, ['approve', 'G9', '--note', 'v1 retro reviewed']);
+    assert.equal(approve.status, 0, approve.stderr || approve.stdout);
+
+    const check = runNode(root, gateScript, ['check', 'G9']);
+    assert.equal(check.status, 0, check.stderr || check.stdout);
+    assert.match(check.stdout, /G9 approved/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs checks release_in_flight against epics[].release', () => {
+  const root = makeProject('release-in-flight');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v2' }));
+    const mismatch = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(mismatch.status, 0);
+    assert.match(mismatch.stderr, /release_in_flight/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v2',
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v2' }],
+    }));
+    const matched = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(matched.status, 0, matched.stderr || matched.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bootstrap seeds release_in_flight and validate.mjs accepts it before any epics exist', () => {
+  const root = makeProject('release-in-flight-seed');
+  try {
+    const seeded = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    assert.equal(seeded.release_in_flight, 'v1');
+    assert.deepEqual(seeded.epics, []);
+
+    // Fresh bootstrap has no PRD/stories yet — validate.mjs must not reject
+    // release_in_flight just because epics[] is still empty.
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bootstrap scaffolds real design tier content: tokens, an example journey, and an example screen', () => {
+  const root = makeProject('design-scaffold-full');
+  try {
+    const tokens = readFileSync(join(root, 'docs/design/tokens.md'), 'utf8');
+    assert.match(tokens, /## Color/);
+    assert.match(tokens, /## Component primitives/);
+
+    const journey = readFileSync(join(root, 'docs/design/journeys/example-journey.md'), 'utf8');
+    assert.match(journey, /doc: journey/);
+    assert.match(journey, /## Entry point/);
+
+    const screen = readFileSync(join(root, 'docs/design/screens/example-screen.md'), 'utf8');
+    assert.match(screen, /fidelity: lo-fi/);
+    assert.match(screen, /## Layout \(lo-fi\)/);
+    assert.match(screen, /## Visual design \(hi-fi\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs accepts a story carrying an optional design_ref', () => {
+  const root = makeProject('design-ref');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'notstarted', order: 0,
+        design_ref: 'docs/design/screens/example-screen.md',
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bootstrap scaffolds a real docs/design/README.md instead of a bare empty directory', () => {
+  const root = makeProject('design-scaffold');
+  try {
+    const readmePath = join(root, 'docs/design/README.md');
+    assert.equal(existsSync(readmePath), true);
+    assert.match(readFileSync(readmePath, 'utf8'), /status: draft/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('doctor validates plugin package and scaffold fixture', () => {
   const result = runNode(repoRoot, join(repoRoot, 'scripts/doctor.mjs'));
 
@@ -212,6 +319,204 @@ test('bootstrap scaffold uses platform-neutral throughline working state', () =>
     assert.doesNotMatch(agents, /\.claude\/epic-<n>\//);
     assert.match(syncStatus, /throughlineDir/);
     assert.doesNotMatch(syncStatus, /claudeDir/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports skipped for a bare scaffold with no product code', () => {
+  const root = makeProject('coverage-skipped');
+  try {
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, 'skipped');
+    assert.deepEqual(summary.stacks, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs nudges instead of failing silently when a stack is detected but not installed', () => {
+  const root = makeProject('coverage-needs-setup');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+
+    const warnRun = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(warnRun.status, 0, warnRun.stderr || warnRun.stdout);
+    const summary = JSON.parse(warnRun.stdout);
+    assert.equal(summary.status, 'needs_setup');
+    assert.equal(summary.stacks[0].stack, 'node-vitest');
+    assert.match(summary.stacks[0].hint, /@vitest\/coverage-v8/);
+
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { min: 0.7, mode: 'enforce' } }));
+    const enforceRun = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.notEqual(enforceRun.status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs --setup adds the missing devDependency without touching anything else', () => {
+  const root = makeProject('coverage-setup');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', scripts: { test: 'node --test' } });
+
+    const setup = runNode(root, join(root, 'scripts/coverage.mjs'), ['--setup']);
+    assert.equal(setup.status, 0, setup.stderr || setup.stdout);
+    assert.match(setup.stdout, /added "c8"/);
+
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    assert.equal(pkg.devDependencies.c8, 'latest');
+    assert.equal(pkg.scripts.test, 'node --test');
+
+    // --setup never installs the package, so detection still reports needs_setup afterward.
+    const after = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(JSON.parse(after.stdout).status, 'needs_setup');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs --story patches only verify.coverage', () => {
+  const root = makeProject('coverage-story');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'in_progress', order: 0,
+        verify: { ci: 'pass', commit: 'abc123' },
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--story', 'S-1', '--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const backlog = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    const story = backlog.stories.find((s) => s.id === 'S-1');
+    // Bare scaffold has no product code, so coverage is "skipped" (no numeric pct) —
+    // verify.ci/commit must survive untouched either way.
+    assert.equal(story.verify.ci, 'pass');
+    assert.equal(story.verify.commit, 'abc123');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs runs the real run/parse/aggregate/--story chain end to end via a coverage.command override', () => {
+  const root = makeProject('coverage-end-to-end');
+  try {
+    // A canned "test runner" that writes a real istanbul-shaped json-summary report,
+    // so this exercises readIstanbulSummary + the aggregate math + the numeric
+    // --story write, not just the skipped/needs_setup early-exit paths.
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 500, covered: 412 } } }));
+      writeFileSync('coverage/lcov.info', 'TN:\\nend_of_record\\n');
+    `, 'utf8');
+
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { min: 0.7, mode: 'enforce', command: 'node write-coverage.mjs' },
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'in_progress', order: 0,
+        verify: { ci: 'pass', commit: 'abc123' },
+      }],
+    }));
+
+    const run = runNode(root, join(root, 'scripts/coverage.mjs'), ['--story', 'S-1', '--json']);
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const summary = JSON.parse(run.stdout);
+    assert.equal(summary.status, 'ok');
+    assert.equal(summary.aggregate.pct, 412 / 500);
+    assert.equal(summary.passed, true);
+
+    const backlog = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    const story = backlog.stories.find((s) => s.id === 'S-1');
+    assert.equal(story.verify.coverage, Math.round((412 / 500) * 1000) / 1000);
+    assert.equal(story.verify.ci, 'pass'); // untouched by --story
+
+    // --reuse must re-evaluate against a raised threshold, not trust the stored `passed`.
+    writeJson(join(root, 'docs/engineering/backlog.json'), { ...backlog, coverage: { min: 0.95, mode: 'enforce', command: 'node write-coverage.mjs' } });
+    const reused = runNode(root, join(root, 'scripts/coverage.mjs'), ['--reuse', '--check']);
+    assert.notEqual(reused.status, 0, reused.stderr || reused.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs enforces coverage.min only when coverage.mode is enforce, and stays backward-compatible when the key is absent', () => {
+  const root = makeProject('coverage-validate');
+  try {
+    approvePrd(root);
+    const doneStory = {
+      id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+      acceptance: 'The app shell renders.', blocked_by: [], status: 'done', order: 0,
+      verify: { ci: 'pass', commit: 'abc123', coverage: 0.5 },
+    };
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { min: 0.7, mode: 'enforce' },
+      stories: [doneStory],
+    }));
+    const enforced = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(enforced.status, 0);
+    assert.match(enforced.stderr, /coverage/);
+
+    // Backward-compat guard: identical backlog, no `coverage` key at all -> must still pass.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ stories: [doneStory] }));
+    const noConfig = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(noConfig.status, 0, noConfig.stderr || noConfig.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs renders without throwing when no coverage data exists', () => {
+  const root = makeProject('coverage-dashboard');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /not measured yet/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs renders the needs_setup nudge and a passing coverage summary without throwing', () => {
+  const root = makeProject('coverage-dashboard-states');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    writeJson(join(root, '.throughline/coverage/summary.json'), {
+      generatedAt: new Date().toISOString(), status: 'needs_setup',
+      stacks: [{ stack: 'node-vitest', tool: '@vitest/coverage-v8', status: 'needs_setup', hint: 'npm install -D @vitest/coverage-v8', passed: true }],
+      aggregate: { pct: null }, threshold: 0.7, mode: 'warn', passed: true,
+    });
+    const needsSetupRun = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(needsSetupRun.status, 0, needsSetupRun.stderr || needsSetupRun.stdout);
+    assert.match(readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8'), /coverage\.mjs --setup/);
+
+    writeJson(join(root, '.throughline/coverage/summary.json'), {
+      generatedAt: new Date().toISOString(), status: 'ok',
+      stacks: [{ stack: 'node-vitest', tool: '@vitest/coverage-v8', status: 'ok', reportFormat: 'lcov', reportPath: 'coverage/lcov.info', covered: 412, total: 500, pct: 0.824, passed: true }],
+      aggregate: { pct: 0.824 }, threshold: 0.7, mode: 'warn', passed: true,
+    });
+    const okRun = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(okRun.status, 0, okRun.stderr || okRun.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /82\.4%/);
+    assert.match(html, /coverage\/lcov\.info/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

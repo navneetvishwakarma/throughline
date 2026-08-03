@@ -31,18 +31,32 @@ Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice 
 ## Gate-in
 - PRD is `status: approved`.
 
+## Mode — seed vs. reconcile (architecture review)
+- **Seed:** `docs/architecture/01-system-overview.md` is not `status: approved` — author fresh.
+- **Reconcile:** it is `approved` — this is an **architecture review** against the new release's `REQ-xx`, not a fresh design. Never regenerate `02-tech-stack.md`/`03-data-model.md`/`05-api-design.md` — amend them and append ADRs (mirrors define-backlog's append-only philosophy).
+
+## Reconcile rules — classify each new-release requirement
+
+| Classification | Action |
+|----------------|--------|
+| Fits unchanged | No architecture change; note it and move on. |
+| Additive extension (new table/column/endpoint, no breaking change) | Amend the relevant doc in place; new ADR only if the extension itself is a non-obvious call. |
+| Breaking / structural revision (touches a shipped data shape/contract) | New ADR required (never edit an accepted one — mark it `status: superseded-by ADR-NNNN`); emit an explicit **migration story** into the next `define-backlog` reconcile pass. |
+
+**Worked v2 example:** `REQ-41: recurring segments` → additive: new `recurrence` table + `PATCH /segments/:id/recurrence` endpoint; data model and API docs amended in place; no shipped table touched; a new ADR is logged only because the recurrence-rule format itself was a genuine design choice.
+
 ## Procedure
-1. Choose the stack (default to proven tech; justify any exotic choice in an ADR).
-2. Design the data model and API shape covering the requirements of the **first epics** only.
-3. Run a Security threat-model pass (auth, authz, PII, secrets, hostile input) on the design.
-4. Log each significant decision as an ADR in `docs/architecture/decisions/`, linked to the `REQ-xx`/epic that triggered it, with alternatives considered.
-5. Note dependencies that will become story `blocked_by` links downstream.
+1. Choose the stack (seed only; reconcile skips unless a new REQ needs a stack-level change, itself a breaking/structural revision). Default to proven tech; justify any exotic choice in an ADR. Also record the coverage tool for that stack in `02-tech-stack.md` (`scripts/coverage.mjs` already defaults to the standard tool per stack — Vitest/Jest/`c8` for Node, `coverage.py` for Python, `go test -coverprofile` for Go, JaCoCo for Java/Kotlin, `cargo-llvm-cov` for Rust — so most projects need no override; log an ADR only if a non-default tool or a `coverage.command`/`coverage.stacks` override is required).
+2. Seed: design the data model and API shape covering the requirements of the **first epics** only. Reconcile: classify each new REQ per the table above and amend in place.
+3. Run a Security threat-model pass (auth, authz, PII, secrets, hostile input) on the design — full pass on seed, scoped to the new REQs on reconcile.
+4. Log each significant decision as an ADR in `docs/architecture/decisions/`, linked to the `REQ-xx`/epic that triggered it, with alternatives considered. Never edit an accepted ADR — supersede it.
+5. Note dependencies that will become story `blocked_by` links downstream; hand off any migration story for `define-backlog` to intake.
 
 ## Outputs
-- `docs/architecture/` — `01-system-overview`, `02-tech-stack`, `03-data-model`, `05-api-design`, `07-infrastructure` (as needed); ADRs in `decisions/`.
+- `docs/architecture/` — `01-system-overview`, `02-tech-stack`, `03-data-model`, `05-api-design`, `07-infrastructure` (as needed); ADRs in `decisions/`, amended not regenerated on reconcile.
 
 ## Automated gate
-- Data model + API cover the first epics' requirements; every ADR has a status and alternatives; security-review pass recorded.
+- Data model + API cover the first epics' (or new release's) requirements; every ADR has a status and alternatives, superseded ones marked not edited; security-review pass recorded; any breaking/structural revision has an emitted migration story.
 
 ## Human gate — G4
 - User accepts the ADRs / architecture. **🔒 Security is a HARD gate:** any auth / OAuth-scope / PII surface must be must-fixed or explicitly accepted-with-mitigation before G4 clears — security can block.

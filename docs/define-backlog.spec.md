@@ -34,7 +34,7 @@ write-spec (PRD, REQ-xx) → [PRD approved] → define-backlog → [validate] �
 ```
 
 `define-backlog` is the only skill that authors `epics[]` and `stories[]`.
-`define-epic` writes `gh_issue` back; `sync-status.mjs` owns story `status`/`verify`.
+`define-epic` writes `gh_issue` back; `sync-status.mjs` owns story `status`. `verify.ci`/`verify.commit` are owned by `implement-epic` (the agent's own test run); `verify.coverage` is owned by `scripts/coverage.mjs`, invoked by `implement-epic` — not `sync-status.mjs`, which never touches `verify`.
 
 ## Two modes
 
@@ -64,7 +64,7 @@ write-spec (PRD, REQ-xx) → [PRD approved] → define-backlog → [validate] �
 Only `docs/engineering/backlog.json`:
 
 - `epics[]` — `id` (`E-x`), `title`, `phase`, `prd_ref` (string or array), `order`, `release` (e.g. `v1`/`v2`), `vertical` (false for enablers), optional `estimate` + `target_date` (→ objective schedule health), `acceptance`. **No status.**
-- `stories[]` — `id` (`S-x`), `title`, `epic` (**required**, `E-x`), `prd_ref`, `order`, `blocked_by`, `acceptance`, `status: "notstarted"`. `prd_ref`, `acceptance`, and `blocked_by` are required so stories cannot become untraceable work.
+- `stories[]` — `id` (`S-x`), `title`, `epic` (**required**, `E-x`), `prd_ref`, `order`, `blocked_by`, `acceptance`, `status: "notstarted"`, optional `design_ref` (path to a `docs/design/screens/*.md` when one exists for this story's `REQ-xx` — a single path; a story needing several screens is a signal to split it). `prd_ref`, `acceptance`, and `blocked_by` are required so stories cannot become untraceable work.
 
 **Never** write `gh_issue` (define-epic owns it) or story `status` beyond the initial
 `notstarted` (sync owns it) or `verify`.
@@ -94,7 +94,9 @@ Only `docs/engineering/backlog.json`:
 |-------|-------|------|
 | `epics[].*` (scope), `stories[].{id,title,epic,prd_ref,order,blocked_by,acceptance}` | human + define-backlog | The plan. |
 | `epics[].gh_issue`, `stories[].gh_issue` | define-epic / ship | Written after GH issues exist. |
-| `stories[].status`, `stories[].verify` | `sync-status.mjs` | Mirrored from GitHub + CI. |
+| `stories[].status` | `sync-status.mjs` | Mirrored from GitHub + CI. |
+| `stories[].verify.ci`, `.commit` | implement-epic | Written after the agent's own test run passes. |
+| `stories[].verify.coverage` | `scripts/coverage.mjs`, invoked by implement-epic | Measured, never hand-typed; `sync-status.mjs` never touches `verify`. |
 | epic status / progress | **derived** | Computed by the dashboard from child stories. Never stored. |
 
 ## Reconcile rules
@@ -106,6 +108,7 @@ Only `docs/engineering/backlog.json`:
 | Requirement materially changed | **Flag** for human; never silently mutate anything with a `gh_issue`. |
 | Requirement removed | **Flag**; do not auto-delete. Keep `done` work as history. |
 | New dependency discovered | Add to story `blocked_by`; re-check acyclicity and re-order. |
+| Migration story emitted by `define-architecture`'s reconcile pass (breaking/structural revision) | Add it as a real story (with `blocked_by` on whatever it migrates), not just a note — it's schedulable work like any other. |
 
 ## Versioning & releases (v2 and beyond)
 
@@ -132,11 +135,23 @@ already shipped, create a **new** story (and epic if needed) describing the chan
 e.g. `S-31: extend manual-add to support recurring segments`. Do **not** reopen or
 edit the shipped story. New work = new id; clean history beats in-place edits.
 
-**The v2 flow.** brainstorm (now grounded in real usage) → append new `REQ-xx` to the
-PRD, tagged to the release → approve the additions → extend architecture/design
-just-in-time → `define-backlog` in **reconcile mode** appends new `release: v2` epics
-+ stories (`notstarted`), leaving v1 untouched → `define-epic` picks them up → the
-dashboard shows v1 at 100% and v2 starting.
+**The v2 flow.** `measure-learn` retro (proceed/pivot) → `define-brief` (grounded in the
+retro) → append new `REQ-xx` to the PRD, tagged to the release → approve the additions
+→ `define-architecture` reviews the new REQs (classify fits-unchanged / additive /
+breaking — see `define-architecture`'s reconcile rules) and `define-design` extends the
+design system just-in-time → `define-backlog` in **reconcile mode** appends new
+`release: v2` epics + stories (`notstarted`), including any migration story architecture
+emitted, leaving v1 untouched → `define-epic` picks them up → the dashboard shows v1 at
+100% and v2 starting.
+
+**Why `release_in_flight` advances here, not in `define-product`.** It was tried in
+`define-product` first: advance the field as soon as the new requirements are tagged.
+That broke — between `define-product`'s pass and this one, `define-architecture` and
+`define-design` both run and both invoke `validate.mjs` as part of their automated gate.
+If `release_in_flight` already says `v2` but no epic carries `release: v2` yet (this
+skill hasn't run), `validate.mjs`'s consistency check fails for two skills that have
+nothing to do with the backlog. Advancing the field in the same write that adds the
+first `v2` epic keeps the two always in sync — there's no window where they can disagree.
 
 ### v2 worked example
 

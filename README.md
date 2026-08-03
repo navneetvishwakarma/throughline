@@ -25,6 +25,7 @@ Throughline gives the agent a fixed operating system for product work:
 - keeps local mode fully offline by default
 - optionally mirrors work to GitHub issues
 - generates dashboard data from structured files, not from agent memory
+- measures code coverage with each stack's own standard tool (Vitest/Jest/`c8`, `coverage.py`, `go test`, JaCoCo, `cargo-llvm-cov`) and gates on it at implement and ship time — auto-detected, never hand-typed
 - stores working state under `.throughline/`
 
 The point is simple: the agent can work between gates, but the human still owns the gates.
@@ -172,10 +173,35 @@ idea
   -> implement-epic
   -> ship-epic                 G7: PR or local merge approved
   -> release                   G8: release go/no-go
-  -> measure and learn
+  -> measure-learn             G9: proceed, pivot, or kill (waits for real usage data)
+  -> loop back to define-brief, in reconcile mode, for v2+
 ```
 
 The agent works between gates. The user decides at the gates.
+
+## Multiple Releases (v2 and Beyond)
+
+A product is never re-scaffolded for its next release. `define-product`, `define-architecture`, `define-backlog`, and (see below) `define-design` each detect whether they're seeding fresh or reconciling an already-approved doc, and amend in place rather than regenerating:
+
+- `define-product` reconciles once its own `06-prd.md` is already `approved` — new requirements get a new `REQ-xx` (never a renumber), tagged to the new release. (Deliberately independent of `backlog.json`, so a brownfield repo brought on via `adopt-project` — which populates `epics[]` without ever running `define-product` — can't land it in the wrong mode.)
+- `define-architecture` reconciles once the architecture overview is already approved — this is a real **architecture review**: each new requirement is classified as fits-unchanged, an additive extension (amend in place), or a breaking/structural revision (new ADR, never edit an accepted one; emits a migration story for the backlog).
+- `define-design` reconciles once its own design tier README is already approved — extends the existing design system rather than redesigning it (see [UI/UX](#uiux) below).
+- `define-backlog` reconciles once any epic/story carries a tracker issue — append-only, `release: v2` epics, shipped work untouched.
+- `measure-learn` (G9) closes the loop: once a release has real usage data, it writes `docs/product/retros/<release>.md` (metrics, ops health, UX debt, and a proceed/pivot/kill decision) that the next `define-brief` reads before starting a new cycle. `release_in_flight` in `backlog.json` is the one field naming which release is currently being worked, so no skill has to infer it.
+
+## UI/UX
+
+`define-design` (G3) is a staged process, not a single undifferentiated "make mockups" step:
+
+1. **User journeys** — grounded in `define-product`'s personas and the in-scope requirements; written before any visual work so screen structure follows real user steps.
+2. **Tokens / design system** — color, type, spacing, radius, elevation, motion.
+3. **Low-fidelity wireframes** — structural layout only, one per key screen from the journey.
+4. **Checkpoint** — wireframes are presented for an explicit go/adjust before high-fidelity work starts. Not a separate gate (this workflow stays gate-light for a solo dev) — an always-executed step inside G3.
+5. **High-fidelity mockups** — tokens/primitives applied to the checkpointed wireframes, same file, `fidelity` flipped from `lo-fi` to `hi-fi` in place.
+6. **Accessibility**, split structural (wireframe stage: focus order, tab sequence, landmarks) and visual (mockup stage: contrast, state indicators).
+7. **Microcopy + empty states.**
+
+A story can carry `design_ref` — one path to the `docs/design/screens/*.md` it implements — which flows into `define-epic`'s acceptance criteria and `implement-epic`'s quality-gate checklist (a **Design** row: implementation compared against the approved screen). On a v2+ reconcile pass, only new journeys/screens get produced; shipped screens are redesigned only when `measure-learn`'s retro explicitly flags UX debt, never silently.
 
 ## Local Mode
 
@@ -231,6 +257,30 @@ Epic planning and ship state live under:
 .throughline/ship-<n>/
 ```
 
+## Coverage
+
+Coverage is auto-detected per stack and measured with each stack's own established tool — never a reinvented one:
+
+| Stack marker | Tool |
+|---|---|
+| `package.json` + Vitest | `@vitest/coverage-v8` |
+| `package.json` + Jest | Jest's built-in coverage |
+| `package.json`, plain `node --test` | `c8` |
+| `pyproject.toml` / `requirements.txt` | `coverage.py` |
+| `go.mod` | `go test -coverprofile` (built into the Go toolchain) |
+| `pom.xml` / `build.gradle` | JaCoCo |
+| `Cargo.toml` | `cargo-llvm-cov` |
+
+Run it manually at any time:
+
+```bash
+node scripts/coverage.mjs           # measure and report
+node scripts/coverage.mjs --setup   # nudge: add the missing tool for a repo that has code but none configured
+node scripts/coverage.mjs --check   # non-zero exit if below threshold (what CI and ship-epic use)
+```
+
+It also runs automatically inside `implement-epic` (writes `story.verify.coverage` from a real measured run — never hand-typed) and `ship-epic` (blocks the merge when `coverage.mode: enforce` and coverage is below threshold). The threshold and mode live in `backlog.json`'s `coverage` field (`min`, `mode: off|warn|enforce`); new projects seed `{ min: 0.7, mode: "warn" }` — measured and reported everywhere, nothing blocks until you flip `mode` to `"enforce"`. Absence of the `coverage` key means no enforcement at all, so installs that predate this feature are unaffected. Each stack's own standard report (`lcov.info`, `coverage.xml`, `jacoco.xml`, the Go cover profile) is kept on disk and uploaded as a CI artifact — no external account or server required, but any platform that ingests those formats can be pointed at it later.
+
 ## Repository Layout
 
 ```text
@@ -245,6 +295,7 @@ throughline/
   scripts/
     doctor.mjs                           repository health check
     install.mjs                          shared platform installer
+  skills/bootstrap-project/assets/scripts/coverage.mjs   stack-detecting coverage gate (scaffolded)
   tests/                                 Node test suite
   CONNECTORS.md                          optional connector matrix
 ```
@@ -258,13 +309,14 @@ throughline/
 | `bootstrap-project` | none | initialize a new repo with Throughline rails |
 | `adopt-project` | G5 | onboard an existing repo |
 | `define-product` | G2 | write product docs and requirements |
-| `define-design` | G3 | produce design direction, tokens, and first screens |
+| `define-design` | G3 | map user journeys, then tokens, wireframes, and mockups |
 | `define-architecture` | G4 | decide stack, data model, API shape, and ADRs |
 | `define-backlog` | G5 | convert requirements into epics and stories |
 | `define-epic` | G6 | expand one epic into story specs and a test plan |
 | `implement-epic` | none | build stories and record verification evidence |
 | `ship-epic` | G7 | merge locally or via PR and refresh status |
 | `release` | G8 | cut a release, changelog, dashboard, and announcement |
+| `measure-learn` | G9 | review metrics/ops/UX signals and decide proceed, pivot, or kill |
 
 ## Connectors
 

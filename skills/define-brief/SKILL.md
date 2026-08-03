@@ -7,6 +7,9 @@ description: Sharpen a vague product idea into a one-page brief. Use at the very
 
 Act as a top-0.1% senior product manager. Start from the user's problem and a measurable outcome, never from a solution. Be ruthless about scope.
 
+## Gate-in (v2+)
+**Mode trigger:** if `docs/engineering/backlog.json` doesn't exist yet, this is cycle 1 — skip the rest of this section, bootstrap hasn't run. If it exists, resolve `<release>` from its `release_in_flight` field (the release just shipped — `define-product` won't advance it to the next tag until later in this cycle) and require `docs/product/retros/<release>.md` to exist with `status: recorded`. If its decision is **kill**, stop — a new brief is not started without an explicit user override. If **proceed** or **pivot**, ground this brief in the retro's metrics/UX-debt/decision rather than starting from a blank slate.
+
 ## Do this
 1. Interview the user until five things are crisp — do not pad:
    - **Problem** — what you're solving, in 1–2 sentences.

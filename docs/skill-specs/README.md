@@ -30,6 +30,7 @@ contract: `../scaffold/docs/engineering/backlog.schema.json`.
 | 7 | `07-implement-epic.md` | modify existing | Developer | — (review at ship) |
 | 8 | `08-ship-epic.md` | modify existing | Developer | G7 PR merge |
 | 9 | `09-release.md` | new | PM | G8 release approved |
+| 10 | `11-measure-learn.md` | new | PM | G9 retro decision confirmed |
 
 ## Shared template (every spec uses these headings)
 
@@ -88,6 +89,7 @@ prevents the same content being parsed again and again.
 | `backlog.json` (one epic + stories) | define-backlog | define-epic → the chosen epic slice; dashboard → all (script, no LLM) |
 | `.codegraph` index | build/daemon | architecture, define-epic, implement, ship → **query, never file-scan** |
 | `story.verify`, ledger | implement-epic | ship, dashboard |
+| `docs/product/retros/<release>.md` | measure-learn | define-brief → next v2+ gate-in (full, once) |
 
 ## Other shared conventions
 

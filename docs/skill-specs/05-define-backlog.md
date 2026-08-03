@@ -28,6 +28,9 @@ Follow the README *Context & token protocol*. Read only the PRD `## Requirements
 - Seed a **Foundation enabler epic** (`order: 0`, `vertical:false`) first.
 - Optional `estimate` + `target_date` per epic → objective schedule health.
 - Honour the `tracker` field; leave `gh_issue` null in local mode and let define-epic write it in GitHub mode.
+- Set story `design_ref` when a `docs/design/screens/*.md` exists for its `REQ-xx` (one screen per story — split the story if it needs more than one).
+- Intake migration stories emitted by `define-architecture`'s reconcile pass as real, schedulable stories.
+- Reconcile mode advances `backlog.json`'s `release_in_flight` to the new release tag, in the same write as the first epic carrying that tag — kept here (not in `define-product`) so the field and `epics[].release` are never inconsistent while `validate.mjs` runs from other skills' gates in between.
 
 ## Reuse
 - `product-management:sprint-planning` (sequencing/capacity), `product-management:roadmap-update` (Now/Next/Later framing).

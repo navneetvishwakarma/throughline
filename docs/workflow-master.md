@@ -53,7 +53,7 @@ gate** rather than silently resolving it.
 | 7 implement-epic | Developer | Security (review) |
 | 8 ship-epic | Developer | Security (secrets/deploy) |
 | 9 release | PM | Security (release risk) |
-| 10 measure & learn | PM | UX (research synthesis) |
+| 10 measure-learn | PM | UX (research synthesis) |
 
 ## Pipeline at a glance
 
@@ -74,7 +74,8 @@ gate** rather than silently resolving it.
    │ 8 ship-epic ──────────────👤 G7 PR review + 🔒security merge    │
    └────────────────────────────────────────────────────────────────┘
  9 release ────────────────────👤 G8 QA pass + release go/no-go
-10 measure & learn (+ ops health) → proceed/pivot/kill → next define-brief (reconcile)
+10 measure-learn (+ ops health) ─👤 G9 proceed/pivot/kill   (waits for real usage data)
+      └→ next define-brief (reconcile) ◀── kill stops here without explicit override
 ```
 
 Automation runs after every ship and on demand: `validate → sync-status → build-dashboard`.
@@ -82,7 +83,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 ## The steps
 
 ### 0 · `define-brief` — sharpen the idea
-- **Mode:** every cycle (v2 brief is grounded in step 10's metrics/feedback).
+- **Mode:** cycle 1 if `backlog.json` doesn't exist yet; v2+ once it does — gate-in resolves `release_in_flight` and requires that release's retro (`status: recorded`) before this brief can be approved.
 - **Wraps:** `product-management:product-brainstorming`.
 - **Reads:** your raw idea (+ for v2: metrics, user research).
 - **Writes:** `docs/product/00-brief.md` — the 5 answers: problem, target user (and non-users), core bet, scope boundary + non-goals, **riskiest assumption**.
@@ -105,10 +106,10 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **👤 gate:** none (mechanical). *Note:* the codegraph index is empty until code lands — it fills in from implement-epic onward.
 
 ### 1b · `adopt-project` — onboard an existing repo *(brownfield, replaces step 1)*
-- **Mode:** first cycle for an existing codebase. Audits, stands up the rails, builds the codegraph index, and reconciles existing work into one `backlog.json` (status seeded from ledgers/commits, not stale tracker state). Spec: `skill-specs/10-adopt-project.md`. Gate: **G5 (adopt)**.
+- **Mode:** first cycle for an existing codebase. Audits, stands up the rails, builds the codegraph index, and reconciles existing work into one `backlog.json` (status seeded from ledgers/commits, not stale tracker state). Also audits coverage tooling (`scripts/coverage.mjs --json`) and, if missing, offers `--setup` before install/commit — never silently. Spec: `skill-specs/10-adopt-project.md`. Gate: **G5 (adopt)**.
 
 ### 2 · `define-product` — the PRD
-- **Mode:** every cycle (reconcile for v2: append new `REQ-xx`, never renumber).
+- **Mode:** seed if `06-prd.md` isn't `approved` yet (covers brownfield repos `adopt-project` brought on without ever running this skill); reconcile once it is (append new `REQ-xx`, never renumber — see the reconcile-rules table in the skill spec). `release_in_flight` is **not** touched here — `define-backlog` advances it (see step 5) so the field never disagrees with `epics[].release` while step 3/4 run `validate.mjs` in between.
 - **Wraps:** `product-management:write-spec`, `marketing:competitive-brief`.
 - **Reads:** `00-brief.md` (+ `00b-validation.md` if a spike ran).
 - **Gate-in:** if a spike ran, its decision must be `proceed`.
@@ -117,23 +118,23 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **👤 G2:** set PRD front-matter `status: approved` (v2: approve only the new requirements). **The pivot from thinking to building.**
 
 ### 3 · `define-design` — design tier *(parallel with 4)*
-- **Mode:** every cycle; first cycle = tokens + a handful of primitives, grow later.
+- **Mode:** seed if `docs/design/README.md` isn't `approved`; reconcile once it is — extends the design system in place, only new journeys/screens for the new release's requirements (a retro-flagged UX-debt item on a shipped screen is new work, never a silent edit).
 - **Wraps:** Claude design / uiuxpromax, then `design:design-critique` + `design:accessibility-review` as self-review.
-- **Reads:** product docs.
-- **Writes:** `docs/design/` — tokens, the components the first screens need, key mockups.
-- **Automated gate:** design-critique + a11y review pass; tokens file present.
-- **👤 G3:** approve the design direction / mockups.
+- **Reads:** product docs (personas, PRD); for reconcile, the release retro's UX-signals/debt section.
+- **Writes:** `docs/design/` — `journeys/*.md` (written first, before visual work), `tokens.md`, the components the screens need, `screens/*.md` (one file per screen: starts `fidelity: lo-fi`, a **checkpoint** step presents it for go/adjust, then flips to `fidelity: hi-fi` in place once approved for polish).
+- **Automated gate:** structural + visual a11y review pass; tokens file present; every journey/screen maps to a `REQ-xx`; every `hi-fi` screen carries a checkpoint line in its Revision history (the durable proof the wireframe checkpoint ran).
+- **👤 G3:** approve the journeys / wireframes (already checkpointed) / mockups.
 
 ### 4 · `define-architecture` — architecture tier *(parallel with 3; may lead for data-heavy products)*
-- **Mode:** every cycle (extend just-in-time; don't over-design).
+- **Mode:** seed if `01-system-overview.md` isn't `approved` yet; reconcile once it is — a real **architecture review** of the new release's `REQ-xx` (fits unchanged / additive extension / breaking revision, see the skill spec's classification table), not a fresh design. Amends existing docs and appends ADRs; never regenerates.
 - **Wraps:** `engineering:system-design`, `engineering:architecture` (ADRs), built-in `security-review`.
 - **Reads:** product docs (+ mockups if available).
-- **Writes:** `docs/architecture/` — stack, data model, API shape; **ADRs** in `decisions/` for the real calls, each linked to the requirement/epic that triggered it.
+- **Writes:** `docs/architecture/` — stack, data model, API shape (+ the coverage tool for the chosen stack, per `scripts/coverage.mjs`'s defaults); **ADRs** in `decisions/` for the real calls, each linked to the requirement/epic that triggered it.
 - **Automated gate:** data model + API cover the first epics; ADRs have status; **security threat-model recorded**.
 - **👤 G4:** accept the ADRs / architecture. **🔒 Security is a hard gate for any auth / OAuth-scope / PII surface — must-fix or explicitly accept-with-mitigation before proceeding.**
 
 ### 5 · `define-backlog` — seed the contract
-- **Mode:** every cycle (reconcile for v2: append `release: v2` epics/stories, leave shipped work untouched).
+- **Mode:** every cycle (reconcile for v2: append `release: v2` epics/stories, leave shipped work untouched — and in the same write, advance `backlog.json`'s `release_in_flight` to `v2`, the one place that field moves forward).
 - **Reads:** approved PRD + tech-plan + architecture.
 - **Writes:** `backlog.json` — **vertically-sliced epics** (release-tagged) grouping **user stories**; orders + `blocked_by`; optional `estimate` + `target_date` per epic (→ objective schedule health). Seed a **Foundation enabler epic** (`vertical:false`) first so feature epics aren't blocked on unstated groundwork. (Spec: `define-backlog.spec.md`.)
 - **Automated gate:** `validate.mjs` passes; every epic has ≥1 story; graph acyclic.
@@ -146,15 +147,15 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **👤 G6:** review the epic plan / test plan / ledger before any code is written.
 
 ### 7 · `implement-epic` — build *(loop)*
-- **Writes:** code + tests per sub-issue; updates the ledger (files, tests, commit) + `story.verify`.
-- **Automated gate:** TDD tests pass, lint clean, `engineering:code-review` + `security-review` self-pass, `verify.ci: pass`.
+- **Writes:** code + tests per sub-issue; updates the ledger (files, tests, commit) + `story.verify` (`ci`/`commit` from the agent's test run, `coverage` measured and patched by `scripts/coverage.mjs --story <id>` — never hand-typed).
+- **Automated gate:** TDD tests pass, lint clean, `engineering:code-review` + `security-review` self-pass, `verify.ci: pass`, `scripts/coverage.mjs --check` passes (or is warn-only / `needs_setup` flagged).
 - **Mid-flight amend:** if building reveals the slice/acceptance/dependency is wrong, **stop** — flag it, run `define-backlog` in reconcile to amend the affected story/epic, and re-clear G6. Never let code silently diverge from the contract.
 - **👤 gate:** none on the happy path — review happens at ship (G7). The amend path re-enters G6.
 
 ### 8 · `ship-epic` — land it *(loop)*
 - **Wraps:** `engineering:deploy-checklist`, built-in `security-review`.
 - **Does:** open PR, run deploy-checklist, on merge close the issues. Then auto-run `sync-status → build-dashboard`.
-- **Automated gate:** CI green; checklist complete; **security-review pass (hard gate for auth/PII changes)**.
+- **Automated gate:** CI green; checklist complete; **security-review pass (hard gate for auth/PII changes)**; `scripts/coverage.mjs --check --reuse` passes when `coverage.mode: enforce` (both local and GitHub mode — local has no CI to fall back on).
 - **👤 G7:** PR review + merge approval (your per-epic quality gate).
 
 ### 9 · `release` — ship to users
@@ -164,10 +165,14 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **Automated gate:** all epics in the release `done`; **QA pass green**; changelog generated; deploy succeeds.
 - **👤 G8:** approve the release (go/no-go to users).
 
-### 10 · measure & learn → loop
-- **Wraps:** `product-management:metrics-review`, `product-management:synthesize-research`, and **`engineering:incident-response`** for post-release ops health (errors/latency/incidents); write a short **retro / decision log** (ADR-style).
-- **Decision:** **proceed / pivot / kill** the next bet based on metrics + ops + research.
-- **Output:** feeds the next `define-brief`. The loop returns to step 0 in **reconcile mode** — v2 amends the PRD and backlog, it does not restart.
+### 10 · `measure-learn` — review and decide *(real gated skill, not folded into release)*
+- **Mode:** once per release, independently of `release` — real usage takes days/weeks to accumulate, so this can't run at ship time. Invoke it whenever you're actually ready to look at metrics.
+- **Wraps:** `product-management:metrics-review`, `:synthesize-research`, `data:analyze`/`build-dashboard`, `design:research-synthesis`, and **`engineering:incident-response`** for post-release ops health (errors/latency/incidents).
+- **Reads:** `07-success-metrics.md` targets + analytics/ops/support data since deploy.
+- **Writes:** `docs/product/retros/<release>.md` — one file per release (never overwritten): metrics vs. targets, ops health, **UX signals/debt** (feeds the next `define-design` reconcile pass's redesign triggers), and the decision.
+- **Automated gate:** all four retro sections present; decision is justified against them.
+- **👤 G9:** confirm **proceed / pivot / kill**. `kill` stops the loop — a new `define-brief` is not started without an explicit user override. `proceed`/`pivot` both feed the next `define-brief`, which reads this retro as its v2+ grounding (see its own gate-in).
+- **Output:** the loop returns to step 0 in **reconcile mode** — v2 amends the PRD and backlog, it does not restart.
 
 ## Automation layer (scripts/tasks, not skills — never need you)
 
@@ -188,6 +193,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 | G6 | Epic plan sound before coding |
 | G7 | PR review + merge (per epic) |
 | G8 | Release go/no-go |
+| G9 | Post-release retro: proceed / pivot / kill |
 
 Everything else — generation, validation, slicing mechanics, tests, sync, dashboard — runs without you.
 
@@ -195,8 +201,25 @@ Everything else — generation, validation, slicing mechanics, tests, sync, dash
 
 - **First cycle only:** `bootstrap-project` (new repo) **or** `adopt-project` (existing repo).
 - **When the bet is risky:** `validate-assumption` (after the brief, before the PRD).
-- **Every cycle, full first time then reconcile:** define-product, define-design, define-architecture, define-backlog.
-- **Every cycle, unchanged:** define-epic → implement → ship → release → measure.
+- **Every cycle, full first time then reconcile — with a real, mechanical seed/reconcile trigger, not just a label:** define-product (`06-prd.md` not-approved vs. approved — deliberately independent of `backlog.json`, so a brownfield `adopt-project` populating `epics[]` first can't put this skill in the wrong mode), define-design (design tier README not-approved vs. approved), define-architecture (`01-system-overview.md` not-approved vs. approved — reconcile means an architecture *review*, not a redesign), define-backlog (`gh_issue` absent vs. present anywhere).
+- **Every cycle, unchanged:** define-epic → implement → ship → release.
+- **Once per release, independently timed:** `measure-learn` (G9) — waits for real usage data, then its retro grounds the next `define-brief`.
+
+## Where UX touches every stage of a release
+
+UI/UX isn't only step 3 — it has a defined role, or a defined absence of one, at every stage:
+
+| Stage | UX touchpoint |
+|-------|----------------|
+| 0 define-brief | None — no UI yet. |
+| 2 define-product | Personas authored here (PM owns *who* the user is); read-only downstream. |
+| 3 define-design | The main stage — journeys → tokens → wireframes → checkpoint → mockups → a11y → microcopy. |
+| 4 define-architecture | Existing "may lead design for data-heavy products" cross-check applies symmetrically on v2 reconcile passes too. |
+| 5 define-backlog | Stories carry `design_ref` (one screen per story) when a screen doc exists for their `REQ-xx`. |
+| 6 define-epic | Per-story spec folds the approved screen's layout/states/microcopy into `acceptance`. |
+| 7 implement-epic | Quality-gate checklist's **Design** row: implementation visually compared against the approved screen doc. |
+| 8 ship-epic / 9 release | No new UX-specific step. |
+| 10 measure-learn | Retro's UX-signals/debt section is what triggers a shipped screen's redesign in the *next* `define-design` reconcile pass — never a silent in-place edit. |
 
 ## Portable across coding agents
 
@@ -243,6 +266,8 @@ This version closes the gaps from `process-review.md`:
 8. **Brownfield path** — `adopt-project` generalizes the migration.
 9. **Ops health + kill/pivot** in measure-and-learn.
 10. **Foundation enabler epic** seeded first.
+11. **measure-learn is now a real gated skill (G9)**, not a folded-in note — it's independently timed from `release` since real usage data doesn't exist at ship time, and its retro concretely gates the next `define-brief` (v2+ gate-in checks for a recorded decision, not just "grounded in metrics" prose).
+12. **`define-product` and `define-architecture` got real seed/reconcile triggers** — previously only `define-backlog` had one; `define-architecture` in particular went from "claimed every-cycle" to an actual architecture-review procedure (fits-unchanged / additive / breaking classification, append-only ADRs, migration-story handoff to the backlog).
 
 ## Reuse map — don't reinvent the wheel
 
@@ -263,14 +288,14 @@ Claude built-in command). **Public add-on** = install separately.
 | 1 bootstrap-project | `anthropic-skills:skill-creator` (build the pipeline skills), `anthropic-skills:schedule` (digest task) | Superpowers › using-git-worktrees |
 | 1b adopt-project | `engineering:tech-debt`, `engineering:system-design`, `product-management:roadmap-update` | — |
 | 2 define-product | `product-management:write-spec`, `:synthesize-research`, `marketing:competitive-brief`, `design:user-research`, `anthropic-skills:doc-coauthoring` | product-tracking-skills (analytics business case) |
-| 3 define-design | `design:design-critique`, `:accessibility-review`, `:design-system`, `:ux-copy`, `anthropic-skills:canvas-design`, `theme-factory`, `web-artifacts-builder`, `brand-guidelines` | miro › miro-diagram (flows) |
+| 3 define-design | `design:design-critique`, `:accessibility-review`, `:design-system`, `:ux-copy`, `anthropic-skills:canvas-design`, `theme-factory`, `web-artifacts-builder`, `brand-guidelines` | miro › miro-diagram (optional polish for journey diagrams — the journey itself is now a first-party deliverable, not gated on this) |
 | 4 define-architecture | `engineering:system-design`, `:architecture` (ADR), `:testing-strategy`, `data:explore-data`/`sql-queries`, built-in `security-review` | miro › miro-code-spec; vanta (if SOC2/compliance) |
 | 5 define-backlog | `product-management:sprint-planning`, `:roadmap-update` | Superpowers › writing-plans |
 | 6 define-epic | `engineering:system-design`, `:testing-strategy`, `product-management:write-spec`, the **Plan** subagent | Superpowers › writing-plans / subagent-driven-development |
 | 7 implement-epic | `engineering:code-review`, `:debug`, built-in `review` + `security-review` | Superpowers › test-driven-development, root-cause-tracing; qodo › qodo-pr-resolver |
 | 8 ship-epic | `engineering:deploy-checklist`, `:incident-response`, built-in `security-review` | qodo › qodo-pr-resolver; vanta › test-remediation |
 | 9 release | `engineering:deploy-checklist`, `product-management:stakeholder-update`, `marketing:content-creation`, `operations:change-request`/`status-report` | product-tracking › instrument-new-feature |
-| 10 measure & learn | `product-management:metrics-review`, `:synthesize-research`, `data:analyze`/`build-dashboard`/`create-viz`, `design:research-synthesis` | product-tracking-skills |
+| 10 measure-learn | `product-management:metrics-review`, `:synthesize-research`, `data:analyze`/`build-dashboard`/`create-viz`, `design:research-synthesis` | product-tracking-skills |
 
 The rule of thumb: if an existing skill does ~80% of a step, the custom skill *calls*
 it and adds only the gate + persona + backlog write-back. Build from scratch only

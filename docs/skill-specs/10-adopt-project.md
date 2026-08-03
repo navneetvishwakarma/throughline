@@ -30,8 +30,8 @@ Follow the README *Context & token protocol*. Audit via sections + the contract,
 - A git repo exists. (No brief/PRD prerequisite — this is reverse-onboarding.)
 
 ## Procedure
-1. **Audit**: detect existing docs tier, tracker, progress files, and the codegraph index; report what's present/missing.
-2. **Rails**: run `init-project.mjs` (non-destructive), add `AGENTS.md`, hooks/CI, and **build/refresh the codegraph index**.
+1. **Audit**: detect existing docs tier, tracker, progress files, the codegraph index, and coverage tooling (`node scripts/coverage.mjs --json` once code exists); report what's present/missing. Also flag whether the repo already renders real UI with no `docs/design/` journeys/screens documenting it — `define-design` needs this signal so its seed pass documents the existing product rather than inventing flows from scratch.
+2. **Rails**: run `init-project.mjs` (non-destructive), add `AGENTS.md`, hooks/CI, and **build/refresh the codegraph index**. If coverage tooling is missing, run `node scripts/coverage.mjs --setup`, present the diff, and ask before installing the new dependency or committing.
 3. **Contract**: reconcile existing work into `backlog.json` — existing tracker items (epics/sub-issues) become epics/stories with `gh_issue`; orphan roadmap items become stories. **Seed status from the most authoritative source (ledgers/commits), not stale tracker state.**
 4. **Dedup**: merge duplicate tracking universes (e.g. roadmap slices vs tracker sub-issues) — never double-count.
 5. **Cut over**: repoint the dashboard to `backlog.json`; archive old progress files.

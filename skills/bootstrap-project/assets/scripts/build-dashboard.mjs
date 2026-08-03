@@ -23,6 +23,35 @@ const outPath = outArg !== -1 ? args[outArg + 1] : join(root, 'PROGRESS_DASHBOAR
 
 const data = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
 const stories = data.stories || [];
+
+// ---- coverage summary (reads scripts/coverage.mjs's output; never throws if absent) ----
+const coverageSummary = (() => {
+  try { return JSON.parse(readFileSync(join(root, '.throughline/coverage/summary.json'), 'utf8')); }
+  catch { return null; }
+})();
+function coverageSection() {
+  const threshold = data.coverage?.min ?? coverageSummary?.threshold ?? 0.7;
+  if (!coverageSummary || coverageSummary.status === 'skipped') {
+    return '<div class="covrow"><span class="covlabel">Coverage</span><span class="covmuted">not measured yet</span></div>';
+  }
+  if (coverageSummary.status === 'needs_setup') {
+    return '<div class="covrow"><span class="covlabel">Coverage</span><span class="covmuted">tool not configured — run <code>node scripts/coverage.mjs --setup</code></span></div>';
+  }
+  const pct = coverageSummary.aggregate?.pct;
+  if (pct == null) {
+    return '<div class="covrow"><span class="covlabel">Coverage</span><span class="covmuted">' + esc(coverageSummary.status) + '</span></div>';
+  }
+  const passed = coverageSummary.passed;
+  const color = passed ? '#1a9b59' : '#e5484d';
+  const reports = (coverageSummary.stacks || [])
+    .filter((s) => s.status === 'ok')
+    .map((s) => '<a class="covlink" href="' + esc(s.reportPath) + '" target="_blank" rel="noopener">' + esc(s.stack) + ' report</a>')
+    .join(' ');
+  return '<div class="covrow"><span class="covlabel">Coverage</span>'
+    + '<span class="covpct" style="color:' + color + '">' + (pct * 100).toFixed(1) + '%</span>'
+    + '<span class="covmin">min ' + (threshold * 100).toFixed(0) + '%</span>'
+    + reports + '</div>';
+}
 const epics = (data.epics || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 const repo = (data.repo || '').replace(/\/$/, '');
 const prdPath = data.prd || 'docs/product/06-prd.md';
@@ -194,7 +223,13 @@ td{padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:.85rem;vertical-al
 .ebar{width:80px;height:6px;background:#eee;border-radius:3px;overflow:hidden}
 .efill{height:100%;border-radius:3px}
 .epct{color:#888;font-size:.8rem}
-.ts{color:#aaa;font-size:.75rem;margin-top:24px;text-align:right}`;
+.ts{color:#aaa;font-size:.75rem;margin-top:24px;text-align:right}
+.covrow{display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:24px;font-size:.85rem}
+.covlabel{font-weight:600;color:#555}
+.covpct{font-weight:700;font-size:1rem}
+.covmin{color:#888}
+.covmuted{color:#aaa}
+.covlink{margin-left:auto;font-size:.78rem;color:#2c7be5;text-decoration:none}`;
 
 const html = `<!DOCTYPE html>
 <html lang="en">
@@ -210,6 +245,7 @@ const html = `<!DOCTYPE html>
   <div class="hl">${esc(headline)}</div>
   <div class="act">${esc(action)}</div>
 </div>
+${coverageSection()}
 <h2>Work board</h2>
 <div class="board">
 ${column('blocked', buckets.blocked, false)}

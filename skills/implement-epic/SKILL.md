@@ -77,11 +77,13 @@ Append to `.throughline/epic-<N>/ledger.md`:
 
 **2d — Write verify into the contract**
 
-After CI confirms the story's tests pass, write `story.verify` in `backlog.json`:
+After CI confirms the story's tests pass, write `ci`/`commit` into `story.verify` in `backlog.json`:
 
 ```json
-"verify": { "ci": "pass", "coverage": <0–1 or omit>, "commit": "<SHA>" }
+"verify": { "ci": "pass", "commit": "<SHA>" }
 ```
+
+Then run `node scripts/coverage.mjs --story <id>` — it measures real coverage for the detected stack and patches `verify.coverage` itself. Never hand-type a coverage number. If the result is `needs_setup` (no coverage tool configured for this stack yet), surface the nudge it prints to the human rather than proceeding as if coverage were fine — `verify.coverage` stays unset until it's resolved.
 
 Do **not** set `status` — `sync-status.mjs` owns that field (tracker mode). In local mode (no tracker), set the story `status: in_progress` on start; leave `done` for ship-epic to set.
 
@@ -104,9 +106,10 @@ After all stories are committed:
 ```bash
 npm run build    # or project equivalent
 npm test 2>&1 | tee .throughline/epic-<N>/test-out.txt
+node scripts/coverage.mjs --json 2>&1 | tee .throughline/epic-<N>/coverage-out.txt
 ```
 
-Surface test output only on failure. On failure: stop, report, fix before continuing.
+Run both, even though `coverage.mjs` also runs tests when it can measure coverage: on `needs_setup` (coverage tool not configured yet) it does **not** run anything, so the plain `npm test` above is what still catches regressions in that case — don't drop it. Surface output only on failure (build/test) or on `needs_setup`/`error` status (coverage). On failure: stop, report, fix before continuing.
 
 Cross-feature self-review checklist:
 
@@ -117,6 +120,8 @@ Cross-feature self-review checklist:
 | Auth/scope consistency | Owner-scoping enforced uniformly |
 | Security | No injection risks, no exposed secrets |
 | Observability | Instrumentation present |
+| Coverage | `node scripts/coverage.mjs --check` passes, or is explicitly warn-only, or `needs_setup` was flagged to the human |
+| Design | Each story with a `design_ref` visually compared against its approved `docs/design/screens/*.md` (layout, states, microcopy); deviations flagged |
 
 Fix any gap before handing off to ship-epic.
 

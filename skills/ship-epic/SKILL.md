@@ -8,7 +8,7 @@ description: Use when an implemented epic is ready to land — open the PR (or m
 Act as a top-0.1% FAANG senior developer landing clean. Consult a security lens on any PR touching auth, PII, or OAuth scopes — that gate is hard and can block the merge.
 
 ## Gate-in
-Epic quality gate passed (all stories' `verify.ci: pass` in `backlog.json`; ledger complete). If not: stop and run `implement-epic` to completion first.
+Epic quality gate passed (all stories' `verify.ci: pass` in `backlog.json`; ledger complete). If not: stop and run `implement-epic` to completion first. If `docs/engineering/backlog.json`'s `coverage.mode` is `enforce`, also run `node scripts/coverage.mjs --check --reuse` — it validates the summary implement-epic already wrote without re-running the full suite. If it fails: stop and send the epic back to `implement-epic`.
 
 ## Context protocol
 Work from the epic branch diff + ledger. If a codegraph index is present (`.codegraph/`), query it for impact/blast-radius of the change; read only the spans returned. Do not re-read source files or whole docs.
@@ -19,7 +19,7 @@ Work from the epic branch diff + ledger. If a codegraph index is present (`.code
 
 In local mode there is no remote repo, no PR, no GitHub. G7 is a local review and merge.
 
-**1. G7 review** — present a `git diff --stat` and a compact summary of what each story implemented. Ask the user to review and approve the merge.
+**1. G7 review** — present a `git diff --stat` and a compact summary of what each story implemented (coverage gate-in already checked above; local mode has no CI to fall back on, so this is the only enforcement point). Ask the user to review and approve the merge.
 
 **2. Merge on approval:**
 ```bash
@@ -49,7 +49,7 @@ Residual risks: <list or "none">
 
 ## Mode B — Remote tracker (tracker: github)
 
-**1. Branch quality gate** — run build + full test suite. If either fails: stop; do not push.
+**1. Branch quality gate** — run build + full test suite (gate-in's coverage check already ran above; CI will also run it once pushed, but failing fast locally saves a round trip). If either fails: stop; do not push.
 
 **2. Security gate (hard)** — run a `security-review` pass on the PR diff. If the epic touches auth, OAuth scopes, or PII this gate is **mandatory and blocking**. Findings must be fixed or explicitly accepted-with-mitigation before G7 clears. Record the decision.
 
