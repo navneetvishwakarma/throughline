@@ -186,8 +186,8 @@ A product is never re-scaffolded for its next release. `define-product`, `define
 - `define-product` reconciles once its own `06-prd.md` is already `approved` — new requirements get a new `REQ-xx` (never a renumber), tagged to the new release. (Deliberately independent of `backlog.json`, so a brownfield repo brought on via `adopt-project` — which populates `epics[]` without ever running `define-product` — can't land it in the wrong mode.)
 - `define-architecture` reconciles once the architecture overview is already approved — this is a real **architecture review**: each new requirement is classified as fits-unchanged, an additive extension (amend in place), or a breaking/structural revision (new ADR, never edit an accepted one; emits a migration story for the backlog).
 - `define-design` reconciles once its own design tier README is already approved — extends the existing design system rather than redesigning it (see [UI/UX](#uiux) below).
-- `define-backlog` reconciles once any epic/story carries a tracker issue — append-only, `release: v2` epics, shipped work untouched.
-- `measure-learn` (G9) closes the loop: once a release has real usage data, it writes `docs/product/retros/<release>.md` (metrics, ops health, UX debt, and a proceed/pivot/kill decision) that the next `define-brief` reads before starting a new cycle. `release_in_flight` in `backlog.json` is the one field naming which release is currently being worked, so no skill has to infer it.
+- `define-backlog` reconciles once any epic/story carries a tracker issue — append-only, `release: v2` epics, shipped work untouched. In the same write, it advances `backlog.json`'s `release_in_flight` to the new release tag — deliberately not `define-product`'s job, since that would leave the field pointing at a release with no matching epic yet while `define-architecture`/`define-design` run in between, and both validate `backlog.json` as part of their own gates.
+- `measure-learn` (G9) closes the loop: once a release has real usage data, it writes `docs/product/retros/<release>.md` (metrics, ops health, UX debt, and a proceed/pivot/kill decision) that the next `define-brief` reads before starting a new cycle, resolving `<release>` from `release_in_flight` — the one field naming which release is currently being worked, so no skill has to infer it.
 
 ## UI/UX
 
@@ -196,12 +196,12 @@ A product is never re-scaffolded for its next release. `define-product`, `define
 1. **User journeys** — grounded in `define-product`'s personas and the in-scope requirements; written before any visual work so screen structure follows real user steps.
 2. **Tokens / design system** — color, type, spacing, radius, elevation, motion.
 3. **Low-fidelity wireframes** — structural layout only, one per key screen from the journey.
-4. **Checkpoint** — wireframes are presented for an explicit go/adjust before high-fidelity work starts. Not a separate gate (this workflow stays gate-light for a solo dev) — an always-executed step inside G3.
+4. **Checkpoint** — wireframes are presented for an explicit go/adjust before high-fidelity work starts. Not a separate gate (this workflow stays gate-light for a solo dev) — an always-executed step inside G3, whose approval is recorded as a line in the screen doc's own revision history (the durable proof it happened).
 5. **High-fidelity mockups** — tokens/primitives applied to the checkpointed wireframes, same file, `fidelity` flipped from `lo-fi` to `hi-fi` in place.
 6. **Accessibility**, split structural (wireframe stage: focus order, tab sequence, landmarks) and visual (mockup stage: contrast, state indicators).
 7. **Microcopy + empty states.**
 
-A story can carry `design_ref` — one path to the `docs/design/screens/*.md` it implements — which flows into `define-epic`'s acceptance criteria and `implement-epic`'s quality-gate checklist (a **Design** row: implementation compared against the approved screen). On a v2+ reconcile pass, only new journeys/screens get produced; shipped screens are redesigned only when `measure-learn`'s retro explicitly flags UX debt, never silently.
+A story can carry `design_ref` — one path to the `docs/design/screens/*.md` it implements — which flows into `define-epic`'s acceptance criteria and `implement-epic`'s quality-gate checklist (a **Design** row: implementation compared against the approved screen). On a v2+ reconcile pass, only new journeys/screens get produced; shipped screens are redesigned only when `measure-learn`'s retro explicitly flags UX debt, never silently. For a brownfield repo adopted via `adopt-project` with real UI already shipped but no design docs, `define-design`'s first pass documents that existing product as built, not hypothetical flows — after that, every later pass is a normal reconcile.
 
 ## Local Mode
 
