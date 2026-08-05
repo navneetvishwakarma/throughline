@@ -41,7 +41,7 @@ Follow the README *Context & token protocol*. Work from the sub-issue spec + led
 - Tests pass, lint clean, code-review + security-review self-pass, `verify.ci: pass` recorded, `node scripts/coverage.mjs --check` passes (or is warn-only / `needs_setup` was flagged), and for any story with a `design_ref` the implementation is visually compared against its approved screen doc with deviations flagged.
 
 ## Human gate
-- None here — human review happens at ship (G7).
+- None here — human review happens at ship (G7). Gate-in checks `node scripts/gate.mjs check G6 --subject <epic-id>` when the script exists, so a stale G6 approval left over from a previous epic can't silently satisfy this one.
 
 ## Definition of Done
 - All sub-issues implemented, tests green, ledger + `verify` updated.

@@ -11,8 +11,8 @@ updated: 2026-06-16
 Bring an **existing** repo onto the workflow without starting over: stand up the
 rails, retrofit a contract from whatever tracking already exists, and reconcile
 in-flight work. Trigger with "adopt this repo", "migrate to the workflow",
-"onboard an existing project", "bring this in line with the workflow". The
-generalized form of the Trazr migration plan.
+"onboard an existing project", "bring this in line with the workflow". A
+generalized brownfield-onboarding procedure, applicable to any existing codebase.
 
 ## Context (token protocol)
 Follow the README *Context & token protocol*. Audit via sections + the contract, not whole-tree reads. **If a codegraph index is absent, build it first (it's the cheapest way to understand existing code); then query it — never scan the source tree.**

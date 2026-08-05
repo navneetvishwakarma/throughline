@@ -51,7 +51,7 @@ Follow the README *Context & token protocol*. Build the changelog from the `back
 - Version tagged + deployed; changelog + announcement produced; dashboard current; measure-and-learn scheduled.
 
 ## Failure modes
-- Any release epic not `done` → block. Deploy/checklist failure → halt, invoke incident-response rollback. Security finding → block go.
+- Any release epic not `done` → block. Deploy/checklist failure → halt; invoke `engineering:incident-response` if available, else redeploy the last known-good tag/commit directly, revert the pushed version tag if any, and notify the user before retrying. Security finding → block go.
 
 ## Note — measure & learn (step 10)
 A separate, lightly-gated skill — see `docs/skill-specs/11-measure-learn.md` (**G9**).

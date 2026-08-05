@@ -14,7 +14,7 @@ Act as a top-0.1% senior PM: testable, unambiguous requirements; non-goals defen
 **Seed** when `docs/product/06-prd.md` is not `status: approved` (fresh product, or a brownfield repo `adopt-project` brought on without ever running this skill — `adopt-project` never touches the PRD's status, so this stays the reliable signal regardless of what's already in `backlog.json`). **Reconcile** once it is `approved` — the same file this skill itself owns and sets at its own gate, so no other skill can put it in the wrong mode.
 
 ## Do this
-1. Author top-down into the stubs: vision → thesis → personas → market → competitive → success-metrics. (Reconcile: only touch sections the new release actually changes — ground the new pass in `retros/<release_in_flight>.md`'s metrics/feedback, don't re-author from scratch.)
+1. Author top-down into the stubs: vision → thesis → personas → market → competitive → success-metrics → GTM strategy (`docs/product/10-gtm-strategy.md`, using `marketing:competitive-brief` if available). (Reconcile: only touch sections the new release actually changes — ground the new pass in `retros/<release_in_flight>.md`'s metrics/feedback, don't re-author from scratch.)
 2. Write `docs/product/06-prd.md`. Give every requirement a stable `REQ-xx` id, a priority (P0/P1/P2), a testable acceptance line, and a `Release` tag (`v1`, `v2`, ...).
 3. Make requirements **vertically sliced** — each maps to one or more future stories, not a horizontal layer.
 4. Flag any requirement touching auth, OAuth scopes, or PII.
@@ -33,11 +33,14 @@ Act as a top-0.1% senior PM: testable, unambiguous requirements; non-goals defen
 
 **Worked v2 example:** shipped PRD has `REQ-01`..`REQ-12` (no `Release` column values — implicitly v1). A v2 pass adds `REQ-13: Recurring segments (Release: v2)` and `REQ-14: Extend manual-add to support recurring segments (Release: v2) — supersedes REQ-04's one-time-only behavior`. `REQ-04` itself is never edited. Only `REQ-13`/`REQ-14` need a fresh `status: approved` — the PRD's front-matter stays `approved` throughout; it's the new rows that get sign-off, not the whole document.
 
+## Automated gate
+Before presenting for G2, run `node scripts/check-docs.mjs --tier=product` — it mechanically checks id format/uniqueness and that every `REQ-xx` row has a non-empty Priority, Acceptance, and Release cell (not a placeholder). Fix until it passes; this replaces eyeballing the table. It cannot and does not check whether a requirement is actually testable/unambiguous or well-sliced — that's judgment, exercised at the human gate below, along with PII/compliance flags.
+
 ## Gate (G2)
 Set `06-prd.md` front-matter `status: approved` (v2: approve only the new requirements, not the whole document again). This is the pivot from thinking to building.
 
 ## Done when
-PRD approved; every requirement has an id + priority + acceptance + release tag; no duplicate/renumbered ids; PII/compliance flags noted.
+`node scripts/check-docs.mjs --tier=product` passes; PRD approved; PII/compliance flags noted.
 
 ## Notes
 Reuse `product-management:write-spec`, `marketing:competitive-brief` if available — otherwise do the step directly. A v2 change to a shipped requirement gets a NEW REQ-xx, never a renumber.

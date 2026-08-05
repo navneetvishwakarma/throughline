@@ -150,6 +150,40 @@ test('gate script persists approval state and blocks missing approvals', () => {
   }
 });
 
+test('gate script scopes approval to a subject so a stale global approval from one epic cannot satisfy another', () => {
+  const root = makeProject('gate-subject');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+
+    const approveE1 = runNode(root, gateScript, ['approve', 'G6', '--subject', 'E-1', '--note', 'epic 1 plan approved']);
+    assert.equal(approveE1.status, 0, approveE1.stderr || approveE1.stdout);
+
+    // The global bare check is satisfied (legacy behavior preserved)...
+    const bareCheck = runNode(root, gateScript, ['check', 'G6']);
+    assert.equal(bareCheck.status, 0, bareCheck.stderr || bareCheck.stdout);
+
+    // ...but a DIFFERENT epic's subject-scoped check must NOT ride on E-1's approval.
+    const checkE3 = runNode(root, gateScript, ['check', 'G6', '--subject', 'E-3']);
+    assert.notEqual(checkE3.status, 0);
+    assert.match(checkE3.stderr, /not approved for E-3/);
+
+    // E-1's own subject-scoped check does pass.
+    const checkE1 = runNode(root, gateScript, ['check', 'G6', '--subject', 'E-1']);
+    assert.equal(checkE1.status, 0, checkE1.stderr || checkE1.stdout);
+
+    // Approving E-3 separately doesn't disturb E-1's recorded approval.
+    const approveE3 = runNode(root, gateScript, ['approve', 'G6', '--subject', 'E-3', '--note', 'epic 3 plan approved']);
+    assert.equal(approveE3.status, 0, approveE3.stderr || approveE3.stdout);
+    const recheckE1 = runNode(root, gateScript, ['check', 'G6', '--subject', 'E-1']);
+    assert.equal(recheckE1.status, 0, recheckE1.stderr || recheckE1.stdout);
+
+    const list = runNode(root, gateScript, ['list']);
+    assert.match(list.stdout, /G6: approved \(E-1: approved, E-3: approved\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('gate script recognizes G9 (measure-learn) alongside the existing gates', () => {
   const root = makeProject('gate-g9');
   try {
@@ -241,6 +275,26 @@ test('validate.mjs accepts a story carrying an optional design_ref', () => {
 
     const result = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects a design_ref that does not point at a real file', () => {
+  const root = makeProject('design-ref-missing');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'notstarted', order: 0,
+        design_ref: 'docs/design/screens/does-not-exist.md',
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /design_ref 'docs\/design\/screens\/does-not-exist\.md' does not point at a real file/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -659,6 +713,299 @@ test('sync-plugin.mjs regenerates AGENTS.md preserving the project name already 
     assert.match(readFileSync(agentsPath, 'utf8'), /^# Fixture — Agent Operating Manual/m);
     const result = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot]);
     assert.doesNotMatch(result.stdout, /needs review.*AGENTS\.md|AGENTS\.md.*needs review/s);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs fails loud when epic working state is written under .claude/ instead of .throughline/', () => {
+  const root = makeProject('misplaced-state');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const before = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(before.status, 0, before.stderr || before.stdout);
+
+    mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
+    writeFileSync(join(root, '.claude/epic-1/ledger.md'), '# ledger\n', 'utf8');
+
+    const after = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(after.status, 0);
+    assert.match(after.stdout + after.stderr, /\.claude\/epic-1.*must live under \.throughline\//);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs --repair-state moves misplaced working state into .throughline/ and validate.mjs passes again', () => {
+  const root = makeProject('repair-state');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
+    writeFileSync(join(root, '.claude/epic-1/ledger.md'), '# ledger\n', 'utf8');
+    writeFileSync(join(root, '.claude/gates.json'), '{}', 'utf8');
+
+    const report = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state']);
+    assert.equal(report.status, 0, report.stderr || report.stdout);
+    assert.match(report.stdout, /\.claude\/epic-1/);
+    assert.match(report.stdout, /\.claude\/gates\.json/);
+    assert.equal(existsSync(join(root, '.claude/epic-1')), true, 'report-only mode must not move anything');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state', '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(existsSync(join(root, '.claude/epic-1')), false);
+    assert.equal(existsSync(join(root, '.throughline/epic-1/ledger.md')), true);
+    assert.equal(existsSync(join(root, '.throughline/gates.json')), true);
+
+    const validate = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(validate.status, 0, validate.stderr || validate.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs --repair-state flags a conflict instead of overwriting an existing .throughline/ destination', () => {
+  const root = makeProject('repair-conflict');
+  try {
+    mkdirSync(join(root, '.throughline/epic-1'), { recursive: true });
+    writeFileSync(join(root, '.throughline/epic-1/ledger.md'), 'real ledger\n', 'utf8');
+    mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
+    writeFileSync(join(root, '.claude/epic-1/ledger.md'), 'stray duplicate\n', 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state', '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.match(apply.stdout, /CONFLICT/);
+    assert.equal(readFileSync(join(root, '.throughline/epic-1/ledger.md'), 'utf8'), 'real ledger\n', 'the real ledger must not be overwritten');
+    assert.equal(existsSync(join(root, '.claude/epic-1')), true, 'a conflicting item must be left in place, not silently dropped');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function fillPrd(root) {
+  const path = join(root, 'docs/product/06-prd.md');
+  let text = readFileSync(path, 'utf8');
+  text = text.replace('| REQ-01 | … | P0 | … | v1 |', '| REQ-01 | User can sign up | P0 | Account created | v1 |');
+  text = text.replace('| REQ-02 | … | P1 | … | v1 |', '| REQ-02 | User can log in | P1 | Session established | v1 |');
+  writeFileSync(path, text, 'utf8');
+}
+
+test('check-docs.mjs --tier=product fails against unfilled placeholders and passes once filled', () => {
+  const root = makeProject('checkdocs-prd');
+  try {
+    const before = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+    assert.equal(before.status, 1);
+    const beforeSummary = JSON.parse(before.stdout);
+    assert.equal(beforeSummary.passed, false);
+    assert.ok(beforeSummary.errors.some((e) => e.includes('missing Acceptance')));
+
+    fillPrd(root);
+    const after = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+    assert.equal(after.status, 0, after.stderr || after.stdout);
+    assert.equal(JSON.parse(after.stdout).passed, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('check-docs.mjs catches an invalid PRD status and a duplicate REQ-xx id', () => {
+  const root = makeProject('checkdocs-prd-invalid');
+  try {
+    fillPrd(root);
+    const path = join(root, 'docs/product/06-prd.md');
+    let text = readFileSync(path, 'utf8');
+    text = text.replace('status: draft', 'status: pending-review');
+    text = text.replace('| REQ-02 | User can log in | P1 | Session established | v1 |', '| REQ-01 | User can log in | P1 | Session established | v1 |');
+    writeFileSync(path, text, 'utf8');
+
+    const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+    assert.equal(result.status, 1);
+    const summary = JSON.parse(result.stdout);
+    assert.ok(summary.errors.some((e) => e.includes('status must be draft|approved')));
+    assert.ok(summary.errors.some((e) => e.includes('duplicate requirement id REQ-01')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('check-docs.mjs cross-references a journey/screen req_ref against the real PRD requirements', () => {
+  const root = makeProject('checkdocs-design-crossref');
+  try {
+    fillPrd(root);
+    const journeyPath = join(root, 'docs/design/journeys/example-journey.md');
+    let journey = readFileSync(journeyPath, 'utf8')
+      .replace('persona: ""', 'persona: "New user"')
+      .replace('req_ref: []', 'req_ref: [REQ-99]');
+    writeFileSync(journeyPath, journey, 'utf8');
+
+    const bad = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=design', '--json']);
+    assert.equal(bad.status, 1);
+    assert.ok(JSON.parse(bad.stdout).errors.some((e) => e.includes("'REQ-99' is not a requirement in the PRD")));
+
+    writeFileSync(journeyPath, journey.replace('req_ref: [REQ-99]', 'req_ref: [REQ-01]'), 'utf8');
+    const screenPath = join(root, 'docs/design/screens/example-screen.md');
+    writeFileSync(screenPath, readFileSync(screenPath, 'utf8').replace('req_ref: ""', 'req_ref: "REQ-01"').replace('journey: ""', 'journey: "example-journey"'), 'utf8');
+
+    const good = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=design', '--json']);
+    assert.equal(good.status, 0, good.stderr || good.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('check-docs.mjs requires a real checkpoint line before accepting fidelity: hi-fi, and ignores the template\'s own instructional comment', () => {
+  const root = makeProject('checkdocs-checkpoint');
+  try {
+    fillPrd(root);
+    const journeyPath = join(root, 'docs/design/journeys/example-journey.md');
+    writeFileSync(journeyPath, readFileSync(journeyPath, 'utf8').replace('persona: ""', 'persona: "New user"').replace('req_ref: []', 'req_ref: [REQ-01]'), 'utf8');
+    const screenPath = join(root, 'docs/design/screens/example-screen.md');
+    let screen = readFileSync(screenPath, 'utf8')
+      .replace('req_ref: ""', 'req_ref: "REQ-01"')
+      .replace('journey: ""', 'journey: "example-journey"')
+      .replace('fidelity: lo-fi', 'fidelity: hi-fi');
+    writeFileSync(screenPath, screen, 'utf8');
+
+    // The unmodified template's HTML comment already contains the word "checkpoint" —
+    // must not count as a real record of the checkpoint step having run.
+    const stillTemplateComment = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=design', '--json']);
+    assert.equal(stillTemplateComment.status, 1);
+    assert.ok(JSON.parse(stillTemplateComment.stdout).errors.some((e) => e.includes('no checkpoint line')));
+
+    screen = screen.replace(/<!--[\s\S]*?-->\n?/, '');
+    writeFileSync(screenPath, screen, 'utf8');
+    const noRealLine = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=design', '--json']);
+    assert.equal(noRealLine.status, 1);
+
+    screen = screen + '- 2026-08-03 — wireframe checkpointed, approved to proceed to hi-fi.\n';
+    writeFileSync(screenPath, screen, 'utf8');
+    const withRealLine = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=design', '--json']);
+    assert.equal(withRealLine.status, 0, withRealLine.stderr || withRealLine.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('check-docs.mjs catches an ADR superseded-by reference pointing at a nonexistent ADR', () => {
+  const root = makeProject('checkdocs-adr');
+  try {
+    mkdirSync(join(root, 'docs/architecture/decisions'), { recursive: true });
+    writeFileSync(join(root, 'docs/architecture/decisions/ADR-0002-broken.md'), '---\ndoc: adr\nstatus: superseded-by ADR-9999\nupdated: 2026-08-03\n---\n\n# ADR-0002\n', 'utf8');
+
+    const bad = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(bad.status, 1);
+    assert.ok(JSON.parse(bad.stdout).errors.some((e) => e.includes('ADR-9999 which does not exist')));
+
+    writeFileSync(join(root, 'docs/architecture/decisions/ADR-9999-real.md'), '---\ndoc: adr\nstatus: accepted\nupdated: 2026-08-03\n---\n\n# ADR-9999\n', 'utf8');
+    const good = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(good.status, 0, good.stderr || good.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('check-docs.mjs validates retro front-matter and requires all four sections', () => {
+  const root = makeProject('checkdocs-retro');
+  try {
+    mkdirSync(join(root, 'docs/product/retros'), { recursive: true });
+    const retroPath = join(root, 'docs/product/retros/v1.md');
+    writeFileSync(retroPath, '---\ndoc: retro\nstatus: draft\nrelease: v1\ndecision: proceed\n---\n\n## Metrics vs. success criteria\ntext\n', 'utf8');
+
+    const incomplete = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=retro', '--json']);
+    assert.equal(incomplete.status, 1);
+    const errors = JSON.parse(incomplete.stdout).errors;
+    assert.ok(errors.some((e) => e.includes('Ops health')));
+    assert.ok(errors.some((e) => e.includes('UX signals')));
+    assert.ok(errors.some((e) => e.includes('Decision')));
+
+    writeFileSync(retroPath, '---\ndoc: retro\nstatus: recorded\nrelease: v1\ndecision: proceed\n---\n\n## Metrics vs. success criteria\ntext\n## Ops health\ntext\n## UX signals / debt\ntext\n## Decision\ntext\n', 'utf8');
+    const complete = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=retro', '--json']);
+    assert.equal(complete.status, 0, complete.stderr || complete.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs scopes the headline progress to the current release and collapses shipped/upcoming releases', () => {
+  const root = makeProject('dashboard-multi-release');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), {
+      schema: 2, project: 'Fixture', prd: 'docs/product/06-prd.md', tracker: 'local',
+      release_in_flight: 'v2',
+      epics: [
+        { id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1' },
+        { id: 'E-2', title: 'Recurring segments', order: 1, prd_ref: 'REQ-02', release: 'v2' },
+        { id: 'E-3', title: 'Multi-city trips', order: 2, prd_ref: 'REQ-03', release: 'v3' },
+      ],
+      stories: [
+        { id: 'S-1', title: 'App shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: [], status: 'done', order: 0 },
+        { id: 'S-2', title: 'Recurring model', epic: 'E-2', prd_ref: 'REQ-02', acceptance: 'x', blocked_by: [], status: 'done', order: 0 },
+        { id: 'S-3', title: 'Recurring form', epic: 'E-2', prd_ref: 'REQ-02', acceptance: 'x', blocked_by: [], status: 'in_progress', order: 1 },
+        { id: 'S-4', title: 'Multi-city model', epic: 'E-3', prd_ref: 'REQ-03', acceptance: 'x', blocked_by: [], status: 'notstarted', order: 0 },
+      ],
+    });
+
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+
+    // Headline ring must reflect only the current release (v2: 1 of 2 done), not all 4 stories.
+    assert.match(html, /1 of 2 stories done/);
+    // v1 is fully done and not current -> shipped, collapsed via <details>.
+    assert.match(html, /<details class="relgroup"><summary><div class="relrow"><span class="relname">v1<\/span><span class="reltag">Shipped<\/span>/);
+    // v3 has nothing started and is not current -> upcoming, also collapsed.
+    assert.match(html, /<details class="relgroup"><summary><div class="relrow"><span class="relname">v3<\/span><span class="reltag">Upcoming<\/span>/);
+    // v2 (current) is NOT wrapped in <details> -- always visible, tagged Current.
+    assert.match(html, /<div class="relgroup current">.*<span class="relname">v2<\/span><span class="reltag">Current<\/span>/s);
+    // Footer keeps the all-release total for context.
+    assert.match(html, /All releases: 2 of 4 stories done/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs treats an untagged epic as the implicit first release, matching define-backlog\'s own v1 convention', () => {
+  const root = makeProject('dashboard-untagged-v1');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    // No release_in_flight, no epic release tags -> single implicit "v1", nothing collapsed,
+    // and behaves exactly like the pre-multi-release dashboard (no "Other releases" section).
+    assert.doesNotMatch(html, /Other releases/);
+    assert.match(html, /Epics &middot; v1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('check-docs.mjs blanket mode does not enforce a tier until its own doc has been approved once, but explicit --tier= always does', () => {
+  const root = makeProject('checkdocs-blanket-gating');
+  try {
+    // Fresh scaffold: PRD, design README, architecture overview are all still draft with
+    // unfilled placeholders. Blanket mode (what CI would run) must not fail on any of it —
+    // a headless project that never touches the design tier must not get permanently
+    // blocked by its own untouched scaffold.
+    const blanketFresh = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--json']);
+    assert.equal(blanketFresh.status, 0, blanketFresh.stderr || blanketFresh.stdout);
+    assert.equal(JSON.parse(blanketFresh.stdout).passed, true);
+
+    // But the skill's own explicit pre-approval gate must still catch the same unfilled PRD.
+    const explicitProduct = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+    assert.equal(explicitProduct.status, 1);
+    assert.equal(JSON.parse(explicitProduct.stdout).passed, false);
+
+    // Once the PRD is approved (front-matter only — rows still unfilled), blanket mode now
+    // enforces it, catching exactly the same issue explicit mode always caught.
+    const prdPath = join(root, 'docs/product/06-prd.md');
+    writeFileSync(prdPath, readFileSync(prdPath, 'utf8').replace('status: draft', 'status: approved'), 'utf8');
+    const blanketAfterApproval = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--json']);
+    assert.equal(blanketAfterApproval.status, 1);
+    assert.ok(JSON.parse(blanketAfterApproval.stdout).errors.some((e) => e.includes('missing Acceptance')));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

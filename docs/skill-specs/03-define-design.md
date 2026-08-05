@@ -50,7 +50,7 @@ Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice 
 - `docs/design/` — `README.md`, `tokens.md`, `journeys/*.md`, `screens/*.md` (wireframe → mockup in one file), ux-copy. Design tier only.
 
 ## Automated gate
-- Structural + visual a11y pass (WCAG AA); tokens file present; every journey maps to a `REQ-xx`; every screen maps to a journey step and a `REQ-xx`; every `hi-fi` screen has a checkpoint line in its Revision history.
+- `node scripts/check-docs.mjs --tier=design` — mechanically checks `README.md`/`tokens.md` presence, journey/screen front-matter (persona, `req_ref` existing in the PRD, `fidelity`, `journey`), and that every `hi-fi` screen has a real checkpoint line in Revision history. Cannot check whether the structural + visual a11y pass (WCAG AA) or the design itself is actually good — that's judgment, done directly at steps 4/6, surfaced at the human gate.
 
 ## Human gate — G3
 - User approves the journeys / wireframes (already checkpointed) / mockups. On approval, `docs/design/README.md` → `status: approved`.

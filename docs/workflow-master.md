@@ -120,7 +120,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **Reads:** `00-brief.md` (+ `00b-validation.md` if a spike ran).
 - **Gate-in:** if a spike ran, its decision must be `proceed`.
 - **Writes (top-down):** `01-product-vision` → `03-user-personas` → `04-market` / `05-competitive` → `06-prd.md`. Every requirement gets a stable **`REQ-xx`** id, a priority, and testable acceptance. Requirements are **vertically sliced** (each maps to one or more features/stories later). Keep lean — enough for the first slices.
-- **Automated gate:** every `REQ` has an id + acceptance; no duplicate/renumbered ids.
+- **Automated gate:** `node scripts/check-docs.mjs --tier=product` — id format/uniqueness, every `REQ-xx` row has Priority/Acceptance/Release filled in. Cannot check whether a requirement is actually testable/well-sliced — judgment, at G2.
 - **👤 G2:** set PRD front-matter `status: approved` (v2: approve only the new requirements). **The pivot from thinking to building.**
 
 ### 3 · `define-design` — design tier *(parallel with 4)*
@@ -128,7 +128,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **Wraps:** Claude design / uiuxpromax, then `design:design-critique` + `design:accessibility-review` as self-review.
 - **Reads:** product docs (personas, PRD); for reconcile, the release retro's UX-signals/debt section.
 - **Writes:** `docs/design/` — `journeys/*.md` (written first, before visual work), `tokens.md`, the components the screens need, `screens/*.md` (one file per screen: starts `fidelity: lo-fi`, a **checkpoint** step presents it for go/adjust, then flips to `fidelity: hi-fi` in place once approved for polish).
-- **Automated gate:** structural + visual a11y review pass; tokens file present; every journey/screen maps to a `REQ-xx`; every `hi-fi` screen carries a checkpoint line in its Revision history (the durable proof the wireframe checkpoint ran).
+- **Automated gate:** `node scripts/check-docs.mjs --tier=design` — `README.md`/`tokens.md` presence, journey/screen front-matter and `REQ-xx` cross-references, every `hi-fi` screen has a real checkpoint line in its Revision history (the durable proof the wireframe checkpoint ran). Cannot judge whether the a11y pass or the design itself is actually good — judgment, done directly, surfaced at G3.
 - **👤 G3:** approve the journeys / wireframes (already checkpointed) / mockups.
 
 ### 4 · `define-architecture` — architecture tier *(parallel with 3; may lead for data-heavy products)*
@@ -136,7 +136,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **Wraps:** `engineering:system-design`, `engineering:architecture` (ADRs), built-in `security-review`.
 - **Reads:** product docs (+ mockups if available).
 - **Writes:** `docs/architecture/` — stack, data model, API shape (+ the coverage tool for the chosen stack, per `scripts/coverage.mjs`'s defaults); **ADRs** in `decisions/` for the real calls, each linked to the requirement/epic that triggered it.
-- **Automated gate:** data model + API cover the first epics; ADRs have status; **security threat-model recorded**.
+- **Automated gate:** `node scripts/check-docs.mjs --tier=architecture` — system-overview status, every ADR's `status` valid (including `superseded-by ADR-NNNN` pointing at a real ADR). Plus `validate.mjs`. Cannot judge whether the data model/API actually cover the epics or the **security threat-model** is any good — judgment, at G4.
 - **👤 G4:** accept the ADRs / architecture. **🔒 Security is a hard gate for any auth / OAuth-scope / PII surface — must-fix or explicitly accept-with-mitigation before proceeding.**
 
 ### 5 · `define-backlog` — seed the contract
@@ -176,7 +176,7 @@ Automation runs after every ship and on demand: `validate → sync-status → bu
 - **Wraps:** `product-management:metrics-review`, `:synthesize-research`, `data:analyze`/`build-dashboard`, `design:research-synthesis`, and **`engineering:incident-response`** for post-release ops health (errors/latency/incidents).
 - **Reads:** `07-success-metrics.md` targets + analytics/ops/support data since deploy.
 - **Writes:** `docs/product/retros/<release>.md` — one file per release (never overwritten): metrics vs. targets, ops health, **UX signals/debt** (feeds the next `define-design` reconcile pass's redesign triggers), and the decision.
-- **Automated gate:** all four retro sections present; decision is justified against them.
+- **Automated gate:** `node scripts/check-docs.mjs --tier=retro` — front-matter enum, all four sections present. Cannot judge whether the decision is actually justified against the data — judgment, at G9.
 - **👤 G9:** confirm **proceed / pivot / kill**. `kill` stops the loop — a new `define-brief` is not started without an explicit user override. `proceed`/`pivot` both feed the next `define-brief`, which reads this retro as its v2+ grounding (see its own gate-in).
 - **Output:** the loop returns to step 0 in **reconcile mode** — v2 amends the PRD and backlog, it does not restart.
 

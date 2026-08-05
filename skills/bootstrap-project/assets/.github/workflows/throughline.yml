@@ -14,6 +14,12 @@ jobs:
         with:
           node-version: 20
       - run: node scripts/validate.mjs
+      # Blanket (no --tier) mode: only enforces a doc tier once its own gate has actually
+      # been cleared once (status: approved) — a headless project that never touches the
+      # design tier, or a repo mid-way through writing its first PRD, must not fail CI
+      # forever on scaffolded placeholder content. Once a tier is approved, this protects
+      # it from silently regressing on every commit after that.
+      - run: node scripts/check-docs.mjs
       - run: node scripts/build-dashboard.mjs --out /tmp/PROGRESS_DASHBOARD.html
 
   # First job that runs the product's own tests, not just the backlog contract.

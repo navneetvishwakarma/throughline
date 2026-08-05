@@ -6,10 +6,14 @@
  * Stories are the leaf records that carry status; epic/release/bucket rollups are
  * DERIVED here and never stored. Standard dashboard template for every repo.
  *
- * Shows: schedule verdict (behind/on track/ahead), a prioritized work board
- * (Blocked → In Progress → Next → Done[collapsed]), per-release progress, and
- * deep links from each item to its GitHub issue (when available) or to the
- * responsible doc/section.
+ * Shows: schedule verdict (behind/on track/ahead) and a prioritized work board
+ * (Blocked → In Progress → Next → Done[collapsed]) SCOPED TO THE CURRENT RELEASE
+ * (backlog.json's release_in_flight — untagged epics count as the implicit first
+ * release, matching define-backlog's own convention). Shipped releases (100% done)
+ * and upcoming ones (release_in_flight hasn't reached them yet) are collapsed into
+ * <details> — referenced, not hidden, and not cluttering the main view. Deep links
+ * from each item to its GitHub issue (when available) or to the responsible
+ * doc/section.
  *
  * Usage: node scripts/build-dashboard.mjs [--out PROGRESS_DASHBOARD.html]
  */
@@ -79,14 +83,31 @@ function rollup(cs) {
 const byEpic = new Map(epics.map((e) => [e.id, []]));
 for (const s of stories) { if (!byEpic.has(s.epic)) byEpic.set(s.epic, []); byEpic.get(s.epic).push(s); }
 
-// ---- overall ----
-const sd = stories.filter((s) => s.status === 'done').length;
-const pct = stories.length ? Math.round((sd / stories.length) * 100) : 0;
+// ---- release classification ----
+// Epics with no release tag belong implicitly to the first release (define-backlog's own
+// convention — v1 epics are typically untagged; only v2+ epics get an explicit tag).
+// release_in_flight is the one field naming which release is currently being worked
+// (advanced by define-backlog, never define-product — see its own reconcile rules).
+const currentRelease = data.release_in_flight || 'v1';
+const epicRelease = (e) => e.release || 'v1';
+const releaseOrder = [];
+for (const e of epics) { const r = epicRelease(e); if (!releaseOrder.includes(r)) releaseOrder.push(r); }
+function releaseEpics(rel) { return epics.filter((e) => epicRelease(e) === rel); }
+function releaseStoryList(rel) { const ids = new Set(releaseEpics(rel).map((e) => e.id)); return stories.filter((s) => ids.has(s.epic)); }
+const currentEpics = releaseEpics(currentRelease);
+const currentEpicIds = new Set(currentEpics.map((e) => e.id));
+const currentStories = stories.filter((s) => currentEpicIds.has(s.epic));
+const otherReleases = releaseOrder.filter((r) => r !== currentRelease);
+
+// ---- current-release progress (the dashboard's headline) ----
+const allDone = stories.filter((s) => s.status === 'done').length;
+const sd = currentStories.filter((s) => s.status === 'done').length;
+const pct = currentStories.length ? Math.round((sd / currentStories.length) * 100) : 0;
 const buckets = {
-  blocked: stories.filter((s) => s.status === 'blocked'),
-  next: stories.filter((s) => s.status === 'notstarted'),
-  in_progress: stories.filter((s) => s.status === 'in_progress'),
-  done: stories.filter((s) => s.status === 'done'),
+  blocked: currentStories.filter((s) => s.status === 'blocked'),
+  next: currentStories.filter((s) => s.status === 'notstarted'),
+  in_progress: currentStories.filter((s) => s.status === 'in_progress'),
+  done: currentStories.filter((s) => s.status === 'done'),
 };
 const ord = (a, b) => (a.order - b.order) || a.id.localeCompare(b.id);
 for (const k of Object.keys(buckets)) buckets[k].sort(ord);
@@ -99,7 +120,7 @@ const HEALTH = {
 };
 const today = new Date().toISOString().slice(0, 10);
 const isOverdue = (e, st) => !!(e.target_date && e.target_date < today && st !== 'done');
-const overdueCount = epics.filter((e) => isOverdue(e, rollup(byEpic.get(e.id) || []).status)).length;
+const overdueCount = currentEpics.filter((e) => isOverdue(e, rollup(byEpic.get(e.id) || []).status)).length;
 const h = data.health || {};
 const ATRISK = { word: 'At risk', c: '#d9730d', grad: 'linear-gradient(135deg,#d9730d,#b35a08)' };
 const verdict = HEALTH[h.overall] || (overdueCount ? HEALTH.behind : buckets.blocked.length ? ATRISK : HEALTH.on_track);
@@ -147,19 +168,15 @@ function column(key, items, collapsed) {
 }
 
 // ---- release progress ----
-const releaseOrder = [];
-for (const e of epics) { const r = e.release || ''; if (!releaseOrder.includes(r)) releaseOrder.push(r); }
-function releaseRow(rel) {
-  const epicIds = epics.filter((e) => (e.release || '') === rel).map((e) => e.id);
-  const relStories = stories.filter((s) => epicIds.includes(s.epic));
-  const { total, done: dn, pct: rp, status } = rollup(relStories);
+function releaseRow(rel, labelOverride) {
+  const { total, done: dn, pct: rp, status } = rollup(releaseStoryList(rel));
   const m = SM[status] || SM.notstarted;
-  return '<div class="relrow"><span class="relname">' + esc(rel || '(untagged)') + '</span>'
+  const tag = labelOverride ? '<span class="reltag">' + esc(labelOverride) + '</span>' : '';
+  return '<div class="relrow"><span class="relname">' + esc(rel) + '</span>' + tag
     + '<div class="relbar"><div class="relfill" style="width:' + rp + '%;background:' + m.c + '"></div></div>'
     + '<span class="relpct">' + esc(String(rp)) + '%</span>'
     + '<span class="relcount">' + esc(String(dn)) + '/' + esc(String(total)) + '</span></div>';
 }
-const relSection = releaseOrder.map(releaseRow).join('');
 
 // ---- epic rows ----
 function epicRow(e) {
@@ -172,6 +189,24 @@ function epicRow(e) {
     + '<td>' + badge + '</td>'
     + '<td><div class="ebar"><div class="efill" style="width:' + ep + '%;background:' + m.c + '"></div></div></td>'
     + '<td class="epct">' + esc(String(dn)) + '/' + esc(String(total)) + '</td></tr>';
+}
+const EPIC_THEAD = '<thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Progress</th><th>Done</th></tr></thead>';
+function epicTable(epicList) {
+  return '<table>' + EPIC_THEAD + '<tbody>' + epicList.map(epicRow).join('') + '</tbody></table>';
+}
+
+// ---- other releases (shipped or upcoming — collapsed, referenced not duplicated) ----
+function otherReleaseGroup(rel) {
+  const status = rollup(releaseStoryList(rel)).status;
+  const label = status === 'done' ? 'Shipped' : status === 'notstarted' ? 'Upcoming' : 'In progress';
+  return '<details class="relgroup"><summary>' + releaseRow(rel, label) + '</summary>'
+    + '<div class="relgroup-body">' + epicTable(releaseEpics(rel)) + '</div></details>';
+}
+
+// ---- current release (always expanded — the dashboard's main focus) ----
+function currentReleaseSection() {
+  return '<div class="relgroup current"><div class="relrow-wrap">' + releaseRow(currentRelease, 'Current') + '</div>'
+    + '<div class="relgroup-body">' + (currentEpics.length ? epicTable(currentEpics) : '<div class="empty">No epics yet for this release.</div>') + '</div></div>';
 }
 
 // ---- HTML ----
@@ -209,12 +244,19 @@ details.done .cards{padding:0 12px 12px}
 .empty{color:#aaa;font-size:.85rem;padding:8px 0}
 h2{font-size:1rem;font-weight:600;margin-bottom:12px}
 .releases{margin-bottom:28px}
-.relrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee}
+.relrow{display:flex;align-items:center;gap:10px;padding:6px 0}
 .relname{width:80px;font-size:.82rem;font-weight:600;flex-shrink:0}
+.reltag{font-size:.7rem;font-weight:600;color:#888;background:#f0f0f0;border-radius:10px;padding:1px 8px;flex-shrink:0}
 .relbar{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}
 .relfill{height:100%;border-radius:4px;transition:width .3s}
 .relpct{width:40px;text-align:right;font-size:.82rem;color:#555}
 .relcount{width:50px;text-align:right;font-size:.78rem;color:#888}
+.relgroup{background:#fff;border-radius:10px;margin-bottom:8px;overflow:hidden}
+.relgroup summary{padding:8px 14px;cursor:pointer;list-style:none}
+.relgroup summary::-webkit-details-marker{display:none}
+.relgroup.current{margin-bottom:24px}
+.relrow-wrap{padding:8px 14px}
+.relgroup-body{padding:0 14px 14px}
 table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
 th{text-align:left;font-size:.78rem;font-weight:600;color:#888;padding:8px 12px;border-bottom:2px solid #eee}
 td{padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:.85rem;vertical-align:middle}
@@ -240,24 +282,23 @@ const html = `<!DOCTYPE html>
 <h1>${esc(data.project)}</h1>
 <div class="sub">Progress Dashboard &middot; generated ${today} &middot; <a href="${esc(data.prd || '')}">PRD</a></div>
 <div class="verdict" style="background:${verdict.grad}">
-  <div class="ring"><span class="ringpct">${pct}%</span><span class="ringof">${sd} of ${stories.length} stories done</span></div>
+  <div class="ring"><span class="ringpct">${pct}%</span><span class="ringof">${sd} of ${currentStories.length} stories done</span></div>
   <h2>${verdict.word}</h2>
   <div class="hl">${esc(headline)}</div>
   <div class="act">${esc(action)}</div>
 </div>
 ${coverageSection()}
-<h2>Work board</h2>
+<h2>Work board &middot; ${esc(currentRelease)}</h2>
 <div class="board">
 ${column('blocked', buckets.blocked, false)}
 ${column('in_progress', buckets.in_progress, false)}
 ${column('next', buckets.next, false)}
 ${column('done', buckets.done, true)}
 </div>
-${releaseOrder.length ? '<h2>By release</h2><div class="releases">' + relSection + '</div>' : ''}
-<h2>Epics</h2>
-<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Progress</th><th>Done</th></tr></thead>
-<tbody>${epics.map(epicRow).join('')}</tbody></table>
-<div class="ts">Source: docs/engineering/backlog.json</div>
+<h2>Epics &middot; ${esc(currentRelease)}</h2>
+${currentReleaseSection()}
+${otherReleases.length ? '<h2>Other releases</h2><div class="releases">' + otherReleases.map((r) => otherReleaseGroup(r)).join('') + '</div>' : ''}
+<div class="ts">${stories.length !== currentStories.length ? 'All releases: ' + allDone + ' of ' + stories.length + ' stories done &middot; ' : ''}Source: docs/engineering/backlog.json</div>
 </div></body></html>`;
 
 writeFileSync(outPath, html, 'utf8');

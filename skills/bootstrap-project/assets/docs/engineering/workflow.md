@@ -22,6 +22,13 @@ or any other agent reading this repo gets the same answer to "what's done, what'
 what's approved" by reading the same four things. There is no separate hand-off step:
 whichever agent picks up the repo next reads this state and resumes.
 
+This guarantee only holds if working state actually lives in `.throughline/` — an agent
+that writes epic ledgers or gate state into `.claude/`, `.cursor/`, or any other
+platform-specific directory (out of habit, not instruction) breaks it for whoever picks
+up the repo next. `node scripts/validate.mjs` checks for exactly this and fails loud if
+it finds skill working state in the wrong place; `node scripts/sync-plugin.mjs
+--repair-state --apply` moves it back.
+
 ## Gate sequence (the pipeline)
 
 ```
@@ -43,6 +50,11 @@ measure-learn            G9    proceed / pivot / kill, from real usage data
 Check where a project actually stands with `node scripts/gate.mjs list` — that reads
 `.throughline/gates.json` directly and is authoritative. Never assume a gate is clear
 because a doc "looks" approved; check the gate.
+
+`G6` and `G7` run once **per epic**, not once per project — always pass
+`--subject <epic-id>` when approving/checking them (`gate.mjs approve G6 --subject E-3`,
+`gate.mjs check G7 --subject E-3`). Without `--subject`, a stale global approval left
+over from a previously shipped epic would silently satisfy a later epic's gate-in.
 
 | Gate | You decide |
 |------|-----------|

@@ -42,7 +42,8 @@ never assume a gate is clear from how a doc reads.
 
 ```
 node scripts/validate.mjs         # validate the contract (run before commit/build)
-node scripts/gate.mjs check G6    # verify a human gate before proceeding
+node scripts/check-docs.mjs       # structural checks on PRD/design/architecture/retro docs
+node scripts/gate.mjs check G6 --subject <epic-id>  # G6/G7 run per epic — always scope with --subject
 node scripts/gate.mjs list        # show every gate's approval state
 node scripts/sync-status.mjs      # update local/GitHub status into the contract
 node scripts/coverage.mjs --check # verify coverage against threshold
@@ -52,7 +53,10 @@ node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (zero tokens)
 ## Skill working state
 
 `.throughline/epic-<n>/` (epic.json, sub-<n>.json, ledger.md) and `.throughline/ship-<n>/issue-<n>.json`
-are owned by the skills. Do not hand-edit them.
+are owned by the skills. Do not hand-edit them. **Never write this state under `.claude/`,
+`.cursor/`, `.vscode/`, `.gemini/`, or any other platform-specific directory** — even out
+of habit — `.throughline/` is the only location every agent reads the same way, and
+`node scripts/validate.mjs` fails loud if it finds epic/ship state anywhere else.
 
 ## Any agent can pick this up
 

@@ -13,6 +13,8 @@ Epic quality gate passed (all stories' `verify.ci: pass` in `backlog.json`; ledg
 ## Context protocol
 Work from the epic branch diff + ledger. If a codegraph index is present (`.codegraph/`), query it for impact/blast-radius of the change; read only the spans returned. Do not re-read source files or whole docs.
 
+**`.throughline/ship-<N>/` writes below go there — never `.claude/`, `.cursor/`, or any other platform-specific directory, even by habit.** `validate.mjs` fails loud if it finds it elsewhere.
+
 ---
 
 ## Mode A — Local (tracker: local, the default)
@@ -23,10 +25,11 @@ In local mode there is no remote repo, no PR, no GitHub. G7 is a local review an
 
 **2. Merge on approval:**
 ```bash
-node scripts/gate.mjs approve G7 --note "local epic merge approved"
+node scripts/gate.mjs approve G7 --subject <epic-id> --note "local epic merge approved"
 git checkout main
 git merge --no-ff epic/<epic-id>-<slug> -m "merge: epic <epic-id>"
 ```
+`--subject <epic-id>` scopes the approval to this epic — G7 runs once per epic, and a stale global approval from a previously shipped epic must never silently satisfy this one's merge.
 
 **3. Set stories done** — write `status: done` for every shipped story in `backlog.json`. (In local mode this skill is the status adapter; `sync-status.mjs` is the adapter only when a tracker is wired.)
 
@@ -82,9 +85,10 @@ EOF
 
 **6. G7 merge** — ask the user to approve the PR. On approval:
 ```bash
-node scripts/gate.mjs approve G7 --note "PR merge approved"
+node scripts/gate.mjs approve G7 --subject <epic-id> --note "PR merge approved"
 gh pr merge --merge --delete-branch
 ```
+`--subject <epic-id>` scopes the approval to this epic, same reason as Mode A.
 
 **7. Close issues** — for each child story with a `gh_issue` in `backlog.json`:
 ```bash

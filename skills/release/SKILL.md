@@ -40,7 +40,7 @@ Version tagged + deployed; changelog + announcement produced; dashboard current;
 - Any release epic not `done` → block; list what remains.
 - QA failure → halt; report failures; do not deploy.
 - Security must-fix open → block go until resolved.
-- Deploy failure → halt; invoke incident-response rollback procedure.
+- Deploy failure → halt; invoke `engineering:incident-response` if available. If not installed, perform the rollback directly: redeploy the last known-good tag/commit, revert the version tag if it was already pushed, and notify the user before retrying — never leave a failed deploy live while re-attempting.
 
 ## Notes
 Reuse `engineering:deploy-checklist`, `product-management:stakeholder-update`, `marketing:content-creation`, `operations:change-request`, `operations:status-report`, `product-management:metrics-review`, `product-management:synthesize-research` where available. Perform steps directly from this spec if skills are not installed.

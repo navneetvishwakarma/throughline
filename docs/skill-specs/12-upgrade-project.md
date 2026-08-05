@@ -71,9 +71,17 @@ and the project's existing scaffold files — never the whole codebase.
 4. `node scripts/init-project.mjs "<project name>"` again — idempotent (`place()`
    never overwrites), so this only materializes new doc-tier files (e.g. the design
    tier for a pre-UI/UX project) without touching anything that already exists.
-5. `node scripts/validate.mjs` — confirms the project's actual `backlog.json` is
-   still compatible with whatever new schema/script logic just landed.
-6. `.throughline/plugin-version.json` is written/updated. If any file is still
+5. `node scripts/sync-plugin.mjs --repair-state` (then `--apply` if it finds
+   anything) — checks for epic/ship ledgers or `gates.json` written under a
+   platform-specific directory (`.claude/`, `.cursor/`, etc.) instead of
+   `.throughline/`. This has happened in practice: an agent defaulting to habit
+   rather than following `AGENTS.md`. Moves each item found, unless something
+   already exists at the `.throughline/` destination, in which case it's flagged
+   for the human rather than merged or overwritten.
+6. `node scripts/validate.mjs` — confirms the project's actual `backlog.json` is
+   still compatible with whatever new schema/script logic just landed, and also
+   fails loud if any working state is still misplaced outside `.throughline/`.
+7. `.throughline/plugin-version.json` is written/updated. If any file is still
    **needs review** (unresolved) at the end of this run, the recorded `version`
    stays at whatever it was before (or `null` on a first sync) and a `pendingReview`
    array lists what's blocking full sync — the file never claims the project is

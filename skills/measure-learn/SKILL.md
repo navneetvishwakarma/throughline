@@ -17,13 +17,16 @@ Act as a top-0.1% FAANG senior PM running a release retro. Ground every conclusi
 4. **Write the retro** — `docs/product/retros/<release>.md`, where `<release>` is `backlog.json`'s `release_in_flight` (the release just shipped — `define-product` hasn't advanced it to the next one yet). One file per release, never overwritten, following `docs/_templates/retro.template.md`'s shape: metrics vs. success criteria, ops health, UX signals/debt, and the decision.
 5. **Decide** — proceed / pivot / kill, justified in 1-2 sentences, grounded in steps 1-3.
 
+## Automated gate
+Before presenting for G9, run `node scripts/check-docs.mjs --tier=retro` — it mechanically checks the retro's front-matter (`status`, `release`, `decision` enum) and that all four sections (Metrics, Ops health, UX signals/debt, Decision) exist. Fix until it passes. It cannot judge whether the metrics analysis is actually grounded in real numbers or the decision is well-justified — that's judgment, exercised at the human gate below.
+
 ## Gate (G9)
 Present the retro. Ask the user to confirm the decision. On confirmation set the retro's front-matter `status: recorded`.
 
 **kill** stops the loop — a new `define-brief` is not started without an explicit user override. **proceed**/**pivot** both unlock the next `define-brief`, which reads this retro as its v2+ grounding (per `define-brief`'s own gate-in).
 
 ## Done when
-Retro written with all four sections + a justified decision; `status: recorded`; G9 approved.
+`node scripts/check-docs.mjs --tier=retro` passes; a justified decision recorded; `status: recorded`; G9 approved.
 
 ## Notes
 Reuse `product-management:metrics-review`, `:synthesize-research`, `data:analyze`/`build-dashboard`, `design:research-synthesis`, and `engineering:incident-response` where available. If not installed, perform each step directly from this spec. Don't run this the same day as `release` — it's the one step in the workflow that deliberately waits for real usage data before it's meaningful.

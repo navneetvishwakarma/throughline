@@ -92,7 +92,7 @@ function readDir(path) {
 }
 
 function checkScriptSyntax() {
-  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs', 'sync-plugin.mjs']) {
+  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs', 'sync-plugin.mjs', 'check-docs.mjs']) {
     run(root, [process.execPath, '--check', join(assetsRoot, 'scripts', script)]);
   }
 }
@@ -120,6 +120,27 @@ function checkScaffold() {
     cpSync(assetsRoot, tmp, { recursive: true });
     run(tmp, [process.execPath, join(tmp, 'scripts/init-project.mjs'), 'Doctor Fixture']);
     run(tmp, [process.execPath, join(tmp, 'scripts/validate.mjs')]);
+
+    // A fresh scaffold's PRD placeholders are unfilled by design — explicit --tier=product
+    // must catch that (not report a false pass). Blanket (no --tier) mode deliberately does
+    // NOT check an unapproved tier (a headless project's untouched docs/design/README.md
+    // must not fail CI forever), so this has to ask for the product tier explicitly — the
+    // same way define-product's own automated gate does. Must run before the PRD gets
+    // flipped to `approved` below for the backlog-validation checks. Call spawnSync
+    // directly: a non-zero exit here is the correct outcome, not a doctor failure.
+    const checkDocsTier = spawnSync(process.execPath, [join(tmp, 'scripts/check-docs.mjs'), '--tier=product', '--json'], { cwd: tmp, encoding: 'utf8', windowsHide: true });
+    const checkDocsTierSummary = JSON.parse(checkDocsTier.stdout || '{}');
+    if (checkDocsTierSummary.passed !== false || !(checkDocsTierSummary.errors || []).some((e) => e.includes('missing Acceptance'))) {
+      fail('check-docs.mjs --tier=product should report the fresh scaffold\'s unfilled PRD placeholders as failures (parser regression?):\n' + checkDocsTier.stdout);
+    }
+
+    // Blanket mode on that same still-unapproved scaffold must report a clean pass — the
+    // regression guard for the approved-gating logic itself.
+    const checkDocsBlanket = spawnSync(process.execPath, [join(tmp, 'scripts/check-docs.mjs'), '--json'], { cwd: tmp, encoding: 'utf8', windowsHide: true });
+    const checkDocsBlanketSummary = JSON.parse(checkDocsBlanket.stdout || '{}');
+    if (checkDocsBlanketSummary.passed !== true) {
+      fail('check-docs.mjs (blanket, no --tier) should pass on a fresh scaffold where nothing has been approved yet — it must not enforce a tier before its own gate has been cleared once:\n' + checkDocsBlanket.stdout);
+    }
 
     const prdPath = join(tmp, 'docs/product/06-prd.md');
     writeFileSync(prdPath, readFileSync(prdPath, 'utf8').replace('status: draft', 'status: approved'), 'utf8');

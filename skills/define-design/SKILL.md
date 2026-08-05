@@ -34,7 +34,7 @@ Supporting lenses: PM (scope — only what the first screens need), Developer (f
 `docs/design/` — `README.md` (tier index), `tokens.md`, `journeys/*.md`, `screens/*.md` (wireframe → mockup, same file), microcopy notes. Nothing outside the in-scope requirements.
 
 ## Automated gate
-Before presenting for G3: structural + visual a11y self-review pass; tokens file present; every journey maps to at least one `REQ-xx`; every screen maps to a journey step and a `REQ-xx`; every screen at `fidelity: hi-fi` has a checkpoint line in its Revision history (the durable proof step 5 ran before step 6).
+Before presenting for G3, run `node scripts/check-docs.mjs --tier=design` — it mechanically checks: `docs/design/README.md` status enum and that `tokens.md` exists; every journey has a persona and at least one `req_ref` that actually exists in the PRD; every screen has a valid `fidelity`, a `req_ref` that exists in the PRD, and a `journey`; every screen at `fidelity: hi-fi` has a real checkpoint line in its Revision history (the durable proof step 5 ran before step 6 — a template's own instructional comment doesn't count). Fix until it passes. It cannot check whether the a11y self-review (structural + visual, run directly as steps 4/6 above) or the design itself is actually *good* — that's judgment, exercised at the human gate below, not deferred to this script.
 
 ## Gate (G3)
 Present the journeys, wireframes (already checkpointed), and mockups. Ask the user to approve. On approval set `docs/design/README.md` `status: approved`. Surface any UX vs developer-feasibility conflict here rather than resolving it silently.

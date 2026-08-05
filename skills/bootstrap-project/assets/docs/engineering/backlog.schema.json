@@ -12,7 +12,7 @@
     "tagline": { "type": "string" },
     "repo": { "type": "string", "description": "Repo base URL for deep-linking issues (only when a remote tracker is used)." },
     "tracker": { "enum": ["local", "github"], "default": "local", "description": "Optional issue-tracker mirror. Default 'local' = offline, no account: stories are the work items, status set by the skills, dashboard links to PRD/backlog. GitHub mirrors via the sync adapter." },
-    "release_in_flight": { "type": "string", "description": "Names the release currently being worked (e.g. 'v1', 'v2'). Written by define-product when it advances to a new reconcile pass; read by measure-learn (names the retro file) and the next define-brief (resolves which retro to check). Freeform, matches epics[].release." },
+    "release_in_flight": { "type": "string", "description": "Names the release currently being worked (e.g. 'v1', 'v2'). Written by define-backlog, in the same write as the first epic tagged to the new release (never by define-product — that would let this field point at a release with no matching epic yet while define-architecture/define-design run validate.mjs in between). Read by measure-learn (names the retro file) and the next define-brief (resolves which retro to check). Freeform, matches epics[].release." },
     "health": {
       "type": "object", "additionalProperties": false,
       "description": "Optional schedule verdict shown on the dashboard (behind/ahead needs a schedule, so it is set, not derived).",

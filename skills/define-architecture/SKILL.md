@@ -41,7 +41,7 @@ Supporting lenses: Security (threat-model, auth/PII — can block G4), Developer
 `docs/architecture/` — system overview, tech-stack, data model, API design, infrastructure (as needed); ADRs in `decisions/`, amended not regenerated on reconcile.
 
 ## Automated gate
-Before presenting for G4: data model and API cover the first epics' (or the new release's) requirements; every ADR has a `status:` line and alternatives; superseded ADRs are marked, never edited; security threat-model recorded; any breaking/structural revision has an emitted migration story; `validate.mjs` still passes.
+Before presenting for G4, run `node scripts/check-docs.mjs --tier=architecture` — it mechanically checks: `01-system-overview.md` status enum; every ADR has a valid `status` (`proposed|accepted|superseded`, or `superseded-by ADR-NNNN` pointing at an ADR that actually exists in `decisions/`). Also run `node scripts/validate.mjs` — still must pass. Neither script can judge whether the data model and API actually *cover* the requirements, whether an ADR's reasoning and alternatives are sound, or whether the security threat-model is any good — that's judgment, exercised directly and surfaced at the human gate below. Any breaking/structural revision still needs its migration story emitted into the next `define-backlog` reconcile pass (a real check that it was emitted, not just claimed, happens when `define-backlog` runs — this skill's job is to emit it).
 
 ## Gate (G4)
 Present the ADRs and architecture. Ask the user to accept.

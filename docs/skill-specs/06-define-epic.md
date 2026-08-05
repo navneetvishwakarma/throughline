@@ -41,7 +41,7 @@ Follow the README *Context & token protocol*. Read only the chosen epic's storie
 - Every child story has scope + acceptance + invariants + test coverage in the plan; GH issues created; `validate.mjs` passes after write-back.
 
 ## Human gate — G6
-- User reviews the epic plan/ledger **before** any code is written.
+- User reviews the epic plan/ledger **before** any code is written. Record approval with `node scripts/gate.mjs approve G6 --subject <epic-id>` — G6 runs once per epic, and `--subject` prevents a stale approval from a previously shipped epic silently satisfying a later one's gate-in.
 
 ## Definition of Done
 - GH epic + sub-issues exist; `gh_issue` written back; ledger created; contract valid.

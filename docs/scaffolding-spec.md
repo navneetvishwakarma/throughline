@@ -8,6 +8,15 @@ purpose: Defines the standard project scaffold — every file/dir, its purpose, 
 
 # Project Scaffolding Spec
 
+> **Superseded.** This is the original working draft (schema v1, flat `stories[]`,
+> no epics) and predates the nested epics+stories model. It was promoted into
+> `skills/bootstrap-project/assets/docs/engineering/workflow.md` and `AGENTS.md`
+> per its own closing note. Those two files, plus `docs/workflow-master.md` and
+> `skills/bootstrap-project/assets/docs/engineering/backlog.schema.json` (schema
+> v2), are authoritative — kept here for history only, not as current reference.
+
+# Project Scaffolding Spec
+
 This document defines the **canonical scaffold** every project instantiates at kickoff. The goal: an AI-assisted development loop that runs on **structured data and a fixed file contract**, so skills pick up predictably without re-reading the whole repo, and the progress dashboard renders from data instead of LLM reasoning.
 
 ## Ownership legend

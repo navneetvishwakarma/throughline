@@ -15,7 +15,15 @@
 //                                                actually looked at every one; prefer --force=
 //   node scripts/sync-plugin.mjs --from=<path>   use an explicit plugin checkout/install
 //                                                instead of auto-detecting one
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, chmodSync } from 'node:fs';
+//   node scripts/sync-plugin.mjs --repair-state          report throughline working state
+//                                                         (epic/ship ledgers, gates.json)
+//                                                         misplaced under a platform-specific
+//                                                         directory (.claude/, .cursor/, ...)
+//                                                         instead of .throughline/
+//   node scripts/sync-plugin.mjs --repair-state --apply  move it into .throughline/ (never
+//                                                         overwrites if something already
+//                                                         exists at the destination)
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, chmodSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -26,6 +34,49 @@ const forceAll = forceArg === '--force';
 const forceOnly = forceArg && forceArg.startsWith('--force=') ? new Set(forceArg.slice('--force='.length).split(',').filter(Boolean)) : null;
 const apply = args.includes('--apply') || forceAll || forceOnly;
 const explicitFrom = args.find((a) => a.startsWith('--from='))?.split('=')[1];
+
+// throughline working state belongs only under .throughline/. An agent defaulting to
+// platform habit (e.g. writing epic ledgers into .claude/) instead of following AGENTS.md
+// has done this in practice — repair it here rather than leaving it to a hand migration.
+const WRONG_STATE_ROOTS = ['.claude', '.cursor', '.vscode', '.gemini', '.codex', '.antigravity'];
+
+function repairState() {
+  const found = [];
+  for (const wrongRoot of WRONG_STATE_ROOTS) {
+    const base = join(root, wrongRoot);
+    if (!existsSync(base)) continue;
+    let entries = [];
+    try { entries = readdirSync(base); } catch { continue; }
+    for (const entry of entries) {
+      if (/^(epic|ship)-/.test(entry) || entry === 'gates.json' || entry === 'plugin-version.json') {
+        found.push({ rel: wrongRoot + '/' + entry, src: join(base, entry), dest: join(root, '.throughline', entry) });
+      }
+    }
+  }
+  if (!found.length) {
+    console.log('No misplaced throughline working state found under ' + WRONG_STATE_ROOTS.join(', ') + '.');
+    return;
+  }
+  console.log('Found ' + found.length + ' item(s) of throughline working state outside .throughline/:');
+  for (const item of found) {
+    if (existsSync(item.dest)) {
+      console.log('  - ' + item.rel + '  CONFLICT: .throughline/' + item.rel.split('/').pop() + ' already exists — resolve by hand, not moved.');
+      continue;
+    }
+    if (apply) {
+      mkdirSync(dirname(item.dest), { recursive: true });
+      renameSync(item.src, item.dest);
+      console.log('  - moved ' + item.rel + ' -> .throughline/' + item.rel.split('/').pop());
+    } else {
+      console.log('  - ' + item.rel + '  would move to .throughline/' + item.rel.split('/').pop() + ' (rerun with --apply)');
+    }
+  }
+}
+
+if (args.includes('--repair-state')) {
+  repairState();
+  process.exit(0);
+}
 
 function shouldForce(rel) {
   if (forceAll) return true;
@@ -97,6 +148,7 @@ const FILES = [
   'scripts/sync-status.mjs',
   'scripts/build-dashboard.mjs',
   'scripts/coverage.mjs',
+  'scripts/check-docs.mjs',
   'scripts/init-project.mjs',
   'scripts/sync-plugin.mjs',
   'docs/engineering/workflow.md',

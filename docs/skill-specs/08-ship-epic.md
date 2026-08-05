@@ -40,7 +40,7 @@ Follow the README *Context & token protocol*. Work from the epic branch diff + l
 - CI green; deploy-checklist complete; security-review pass (where required); coverage gate-in passed when `coverage.mode: enforce`; post-merge `validate.mjs` passes.
 
 ## Human gate — G7
-- User reviews the PR and approves the merge (per-epic quality gate).
+- User reviews the PR and approves the merge (per-epic quality gate). Record approval with `node scripts/gate.mjs approve G7 --subject <epic-id>` — G7 runs once per epic, and `--subject` prevents a stale approval from a previously shipped epic silently satisfying a later one.
 
 ## Definition of Done
 - PR merged, issues closed, `sync-status` set stories `done`, dashboard refreshed.

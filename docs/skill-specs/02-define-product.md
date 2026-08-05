@@ -36,7 +36,7 @@ Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice 
 - **Reconcile:** `06-prd.md` is `approved` — the same file/field this skill itself sets at its own gate, so no other skill (e.g. `adopt-project` populating `backlog.json`) can put it in the wrong mode.
 
 ## Procedure
-1. Author top-down into existing stubs: `01-product-vision` → `02-product-thesis` → `03-user-personas` → `04-market-research` → `05-competitive-analysis` → `07-success-metrics`. Reconcile: only touch the sections the new release actually changes, grounded in `retros/<release_in_flight>.md`'s metrics/feedback — don't re-author from scratch.
+1. Author top-down into existing stubs: `01-product-vision` → `02-product-thesis` → `03-user-personas` → `04-market-research` → `05-competitive-analysis` → `07-success-metrics` → `10-gtm-strategy`. Reconcile: only touch the sections the new release actually changes, grounded in `retros/<release_in_flight>.md`'s metrics/feedback — don't re-author from scratch.
 2. Write `06-prd.md`. Give each requirement a stable **`REQ-xx`** id, a priority (P0/P1/P2), a testable acceptance line, and a **`Release`** tag (`v1`, `v2`, ...).
 3. Ensure requirements are **vertically sliced** — each maps to one or more future features/stories, not a horizontal layer.
 4. Have Security tag any requirement touching auth, PII, or regulated data.
@@ -59,7 +59,7 @@ Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice 
 - `docs/product/01..07` filled; `06-prd.md` with `REQ-xx` ids and `Release` tags. PM-tier docs only — no backlog, no architecture.
 
 ## Automated gate
-- Every `REQ` has an id + priority + acceptance + release tag; no duplicate or renumbered ids; vision/personas/PRD non-empty.
+- `node scripts/check-docs.mjs --tier=product` — mechanically checks id format/uniqueness and that every `REQ-xx` row has a non-empty Priority/Acceptance/Release cell. Cannot check whether a requirement is testable/unambiguous or well-sliced — that's judgment, at the human gate.
 
 ## Human gate — G2
 - Set `06-prd.md` front-matter `status: approved` (v2: approve only the new requirements). **The pivot from thinking to building.**

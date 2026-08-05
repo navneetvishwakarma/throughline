@@ -56,7 +56,7 @@ Follow the README *Context & token protocol*. Load `AGENTS.md` + only the slice 
 - `docs/architecture/` — `01-system-overview`, `02-tech-stack`, `03-data-model`, `05-api-design`, `07-infrastructure` (as needed); ADRs in `decisions/`, amended not regenerated on reconcile.
 
 ## Automated gate
-- Data model + API cover the first epics' (or new release's) requirements; every ADR has a status and alternatives, superseded ones marked not edited; security-review pass recorded; any breaking/structural revision has an emitted migration story.
+- `node scripts/check-docs.mjs --tier=architecture` — mechanically checks `01-system-overview.md` status and that every ADR's `status` is valid (`proposed|accepted|superseded`, or `superseded-by ADR-NNNN` pointing at a real ADR). Plus `validate.mjs` still passes. Neither can judge whether the data model/API actually cover the requirements, whether an ADR's reasoning is sound, or the security threat-model's quality — that's judgment, surfaced at the human gate.
 
 ## Human gate — G4
 - User accepts the ADRs / architecture. **🔒 Security is a HARD gate:** any auth / OAuth-scope / PII surface must be must-fixed or explicitly accepted-with-mitigation before G4 clears — security can block.

@@ -43,7 +43,7 @@ the whole product tier.
 - `docs/product/retros/<release>.md` with metrics, ops health, UX signals/debt, and a recorded decision.
 
 ## Automated gate
-- All four retro sections present; decision is one of proceed/pivot/kill with a justification.
+- `node scripts/check-docs.mjs --tier=retro` — mechanically checks front-matter (`status`, `release`, `decision` enum) and that all four sections exist. Cannot judge whether the analysis is actually grounded or the decision well-justified — that's judgment, at the human gate.
 
 ## Human gate — G9
 - User confirms the decision. On confirmation, set the retro's `status: recorded`.

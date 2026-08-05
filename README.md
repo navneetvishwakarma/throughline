@@ -189,6 +189,8 @@ A product is never re-scaffolded for its next release. `define-product`, `define
 - `define-backlog` reconciles once any epic/story carries a tracker issue — append-only, `release: v2` epics, shipped work untouched. In the same write, it advances `backlog.json`'s `release_in_flight` to the new release tag — deliberately not `define-product`'s job, since that would leave the field pointing at a release with no matching epic yet while `define-architecture`/`define-design` run in between, and both validate `backlog.json` as part of their own gates.
 - `measure-learn` (G9) closes the loop: once a release has real usage data, it writes `docs/product/retros/<release>.md` (metrics, ops health, UX debt, and a proceed/pivot/kill decision) that the next `define-brief` reads before starting a new cycle, resolving `<release>` from `release_in_flight` — the one field naming which release is currently being worked, so no skill has to infer it.
 
+The dashboard follows the same focus: its headline verdict and work board are scoped to `release_in_flight` only. Shipped releases (100% done) and upcoming ones collapse into a reference-if-needed `<details>` block each — a v1 that's fully done doesn't compete for attention with the v2 work actually happening now, but its epics are one click away, not gone.
+
 ## Keeping a Project in Sync
 
 `bootstrap-project`/`adopt-project` run once and copy a snapshot of the plugin's scaffold (`scripts/*.mjs`, `docs/engineering/workflow.md`, `docs/_templates/*`, CI, hooks, `AGENTS.md`) into the project. That snapshot doesn't update itself — a project bootstrapped before a plugin release gained the coverage tooling, the design tier, or `measure-learn` stays frozen at its old version until something explicitly brings it forward.
@@ -205,6 +207,8 @@ node scripts/sync-plugin.mjs --force          # accept the plugin's version of e
 It never touches `backlog.json`, `.throughline/` working state, or anything already written under `docs/product|architecture|design/` — those are project content, not scaffold, and `place()`'s own idempotency (reused, not reimplemented) is what guarantees that when `upgrade-project` re-runs `init-project.mjs` to materialize newly-added doc-tier files. `.throughline/plugin-version.json` (stamped at bootstrap, updated on every sync) records which plugin version a project is current with.
 
 This is also what makes the cross-platform handoff durable over time, not just at the moment of bootstrap: a project opened in Codex today reads the same `workflow.md` a Claude Code session would, regardless of which platform originally scaffolded it or how long ago.
+
+**Guarding against working state landing in the wrong place.** All of this assumes epic/ship ledgers and gate state actually live under `.throughline/` — but an agent can default to platform habit (writing into `.claude/` instead of following `AGENTS.md`) rather than instruction, and this has happened in practice. Two layers catch it: `node scripts/validate.mjs` (wired into the pre-commit hook, so it runs on every commit) fails loud if it finds epic/ship ledgers or `gates.json` under `.claude/`, `.cursor/`, `.vscode/`, `.gemini/`, `.codex/`, or `.antigravity/` instead of `.throughline/`; and `node scripts/sync-plugin.mjs --repair-state --apply` moves anything found back where it belongs, refusing to overwrite if something already exists at the `.throughline/` destination.
 
 ## UI/UX
 
@@ -298,6 +302,20 @@ node scripts/coverage.mjs --check   # non-zero exit if below threshold (what CI 
 
 It also runs automatically inside `implement-epic` (writes `story.verify.coverage` from a real measured run — never hand-typed) and `ship-epic` (blocks the merge when `coverage.mode: enforce` and coverage is below threshold). The threshold and mode live in `backlog.json`'s `coverage` field (`min`, `mode: off|warn|enforce`); new projects seed `{ min: 0.7, mode: "warn" }` — measured and reported everywhere, nothing blocks until you flip `mode` to `"enforce"`. Absence of the `coverage` key means no enforcement at all, so installs that predate this feature are unaffected. Each stack's own standard report (`lcov.info`, `coverage.xml`, `jacoco.xml`, the Go cover profile) is kept on disk and uploaded as a CI artifact — no external account or server required, but any platform that ingests those formats can be pointed at it later.
 
+## Doc-Tier Structural Checks
+
+Every gate that used to rely on an agent eyeballing a prose checklist ("every REQ has an id + priority + acceptance", "every hi-fi screen was checkpointed") now runs `node scripts/check-docs.mjs` instead. It mechanically validates what's objectively checkable — front-matter status enums, id format and uniqueness, `REQ-xx` cross-references between the PRD and design docs, ADR `superseded-by` references pointing at ADRs that actually exist, required retro sections — and refuses to guess at anything it can't verify.
+
+```bash
+node scripts/check-docs.mjs                    # check every tier
+node scripts/check-docs.mjs --tier=product      # PRD only
+node scripts/check-docs.mjs --tier=design       # design tier only
+node scripts/check-docs.mjs --tier=architecture # architecture tier only
+node scripts/check-docs.mjs --tier=retro        # retros only
+```
+
+What it deliberately does **not** check: whether a requirement is actually testable and well-sliced, whether a mockup looks good, whether an ADR's reasoning holds up, whether a retro's decision is well-justified. Those are semantic judgment calls no dependency-free script can make — they stay exactly where they belong, exercised by the agent and confirmed at the human gate. The line is: structure and cross-references are code's job; quality is judgment's job, and neither pretends to be the other.
+
 ## Repository Layout
 
 ```text
@@ -312,7 +330,9 @@ throughline/
   scripts/
     doctor.mjs                           repository health check
     install.mjs                          shared platform installer
-  skills/bootstrap-project/assets/scripts/coverage.mjs   stack-detecting coverage gate (scaffolded)
+  skills/bootstrap-project/assets/scripts/coverage.mjs    stack-detecting coverage gate (scaffolded)
+  skills/bootstrap-project/assets/scripts/check-docs.mjs  doc-tier structural checks (scaffolded)
+  skills/bootstrap-project/assets/scripts/sync-plugin.mjs upgrade a project's scaffold (scaffolded)
   tests/                                 Node test suite
   CONNECTORS.md                          optional connector matrix
 ```

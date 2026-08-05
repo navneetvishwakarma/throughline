@@ -13,6 +13,8 @@ Act as a top-0.1% FAANG principal architect. Decompose one epic into airtight pe
 ## Context protocol
 Load `AGENTS.md` + only the chosen epic's stories + their `prd_ref` requirement from the PRD + the ADR linked to the epic. Never load whole docs. If a codegraph index is present (`.codegraph/`), query it to map the epic to affected symbols/files and read only those spans — never scan the source tree.
 
+**All working state below goes under `.throughline/epic-<N>/` — never `.claude/`, `.cursor/`, or any other platform-specific directory, even by habit.** `validate.mjs` fails loud if it finds it elsewhere.
+
 ## Step 1 — Pick the epic
 
 Read `docs/engineering/backlog.json`. Select the epic with the lowest `order` whose stories all have satisfied `blocked_by` dependencies (every referenced story id is `done`). Report the chosen epic.
@@ -87,7 +89,7 @@ Append a header to `docs/MANUAL-TESTS.md` for this epic and its sub-issues (crea
 Run `node scripts/validate.mjs` after any write-back; fix until it passes.
 
 ## Gate (G6)
-Present the epic plan, per-story specs, and test plan. Ask the user to approve **before any code is written**. On approval run `node scripts/gate.mjs approve G6 --note "epic plan approved"` when available. Then the epic is ready for `implement-epic`.
+Present the epic plan, per-story specs, and test plan. Ask the user to approve **before any code is written**. On approval run `node scripts/gate.mjs approve G6 --subject <epic-id> --note "epic plan approved"` when available — `--subject` scopes the approval to this one epic, so a stale G6 approval from a previously shipped epic can never silently satisfy this one's gate-in. Then the epic is ready for `implement-epic`.
 
 ## Done when
 `.throughline/epic-<N>/` exists with all story specs, test-plan.md, and ledger skeleton; `gh_issue` written back (tracker mode only); `validate.mjs` passes; G6 approved.

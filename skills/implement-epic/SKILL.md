@@ -8,10 +8,12 @@ description: Use when an epic has been defined and G6 approved, and the user wan
 Act as a top-0.1% FAANG senior developer. Write simple, readable, well-tested code in small vertical increments. Optimise for correctness. Leave the codebase cleaner than you found it.
 
 ## Gate-in
-G6 is approved: `.throughline/epic-<N>/` exists with story specs, test-plan.md, and ledger skeleton, and `node scripts/gate.mjs check G6` passes when the script exists.
+G6 is approved: `.throughline/epic-<N>/` exists with story specs, test-plan.md, and ledger skeleton, and `node scripts/gate.mjs check G6 --subject <epic-id>` passes when the script exists — the subject scoping matters here specifically, since G6 runs once per epic and a global approval left over from a previous epic must never silently satisfy this one.
 
 ## Context protocol
 Work from the sub-issue spec + ledger. If a codegraph index is present (`.codegraph/`), query it to locate the exact symbols/call sites to change and read only those spans — never scan or read whole files to find code. Don't re-read docs the epic spec already distilled.
+
+**Ledger and test-output writes below go under `.throughline/epic-<N>/` — never `.claude/`, `.cursor/`, or any other platform-specific directory, even by habit.** `validate.mjs` fails loud if it finds it elsewhere.
 
 ## Step 1 — Fetch and orient
 

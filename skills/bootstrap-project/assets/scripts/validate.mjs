@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Validate docs/engineering/backlog.json (schema v2). Dependency-free. Exits non-zero on error.
-import { readFileSync } from 'node:fs';
+// Validate docs/engineering/backlog.json (schema v2) and catch skill working state
+// misplaced outside .throughline/. Dependency-free. Exits non-zero on error.
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 const root = process.cwd();
 const path = join(root, 'docs/engineering/backlog.json');
@@ -11,9 +12,32 @@ const STORY_RE = /^S-[0-9]+[a-z]?$/;
 const REQ_RE = /^REQ-[0-9]+$/;
 const errors = [];
 const err = (m) => errors.push(m);
+
+// Skill working state (epic/ship ledgers, gates) belongs only under .throughline/ —
+// every agent (Claude, Codex, Antigravity, Cursor, Gemini) reads that one location the
+// same way. An agent defaulting to platform habit instead of following AGENTS.md has
+// written it into a platform-specific directory before; catch that here, not just in
+// prose, since this is the one check that runs on every commit via the pre-commit hook.
+const WRONG_STATE_ROOTS = ['.claude', '.cursor', '.vscode', '.gemini', '.codex', '.antigravity'];
+for (const wrongRoot of WRONG_STATE_ROOTS) {
+  const base = join(root, wrongRoot);
+  if (!existsSync(base)) continue;
+  let entries = [];
+  try { entries = readdirSync(base); } catch { continue; }
+  for (const entry of entries) {
+    if (/^(epic|ship)-/.test(entry) || entry === 'gates.json' || entry === 'plugin-version.json') {
+      err(wrongRoot + '/' + entry + ': throughline working state must live under .throughline/, not ' + wrongRoot + '/ — run `node scripts/sync-plugin.mjs --repair-state --apply` to move it, or move it by hand.');
+    }
+  }
+}
+
 let data;
 try { data = JSON.parse(readFileSync(path, 'utf8')); }
-catch (e) { console.error('Cannot read/parse ' + path + '\n  ' + e.message); process.exit(1); }
+catch (e) {
+  errors.forEach((m) => console.error('  - ' + m));
+  console.error('Cannot read/parse ' + path + '\n  ' + e.message);
+  process.exit(1);
+}
 if (data.schema !== 2) err('schema must be 2 (got ' + JSON.stringify(data.schema) + ')');
 if (!data.project) err('project is required');
 if (!data.prd) err('prd path is required');
@@ -58,6 +82,7 @@ const ids = new Set();
   if (!STATUS.includes(s.status)) err(at + ': status must be one of ' + STATUS.join('|'));
   if (typeof s.order !== 'number') err(at + ': order must be a number');
   if (!Array.isArray(s.blocked_by)) err(at + ': blocked_by must be an array');
+  if (s.design_ref && !existsSync(join(root, s.design_ref))) err(at + ": design_ref '" + s.design_ref + "' does not point at a real file");
   if (s.status === 'done' && (s.verify?.ci !== 'pass' || !s.verify?.commit)) err(at + ': done stories require verify.ci pass and verify.commit');
   if (s.status === 'done' && data.coverage?.mode === 'enforce') {
     const min = data.coverage.min ?? 0.7;
