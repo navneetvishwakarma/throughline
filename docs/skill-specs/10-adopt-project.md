@@ -30,18 +30,22 @@ Follow the README *Context & token protocol*. Audit via sections + the contract,
 - A git repo exists. (No brief/PRD prerequisite — this is reverse-onboarding.)
 
 ## Procedure
-1. **Audit**: detect existing docs tier, tracker, progress files, the codegraph index, and coverage tooling (`node scripts/coverage.mjs --json` once code exists); report what's present/missing. Also flag whether the repo already renders real UI with no `docs/design/` journeys/screens documenting it — `define-design` needs this signal so its seed pass documents the existing product rather than inventing flows from scratch.
-2. **Rails**: run `init-project.mjs` (non-destructive), add `AGENTS.md`, hooks/CI, and **build/refresh the codegraph index**. If coverage tooling is missing, run `node scripts/coverage.mjs --setup`, present the diff, and ask before installing the new dependency or committing.
-3. **Contract**: reconcile existing work into `backlog.json` — existing tracker items (epics/sub-issues) become epics/stories with `gh_issue`; orphan roadmap items become stories. **Seed status from the most authoritative source (ledgers/commits), not stale tracker state.**
-4. **Dedup**: merge duplicate tracking universes (e.g. roadmap slices vs tracker sub-issues) — never double-count.
-5. **Cut over**: repoint the dashboard to `backlog.json`; archive old progress files.
-6. **Verify** (subagent): `validate.mjs` passes; rollups match reality; counts cross-check vs the old tracker.
+1. **Bootstrap the scaffold tooling itself, non-destructively**: this repo has never run any throughline skill, so `scripts/`, `.githooks/`, and the doc templates don't exist yet. Hand-copy `sync-plugin.mjs` from the installed plugin into `scripts/`, run it report-only first (a real path collision with the repo's own unrelated files shows as **needs review** — resolve with the human, same caution `upgrade-project` uses), then `--apply`. Every later step depends on this.
+2. **Branch check**: `node scripts/ensure-branch.mjs --skill=adopt-project` — off `main` before anything else lands.
+3. **Audit**: detect existing docs tier, tracker, progress files, the codegraph index, and coverage tooling (`node scripts/coverage.mjs --json` once code exists); report what's present/missing. Also flag whether the repo already renders real UI with no `docs/design/` journeys/screens documenting it — `define-design` needs this signal so its seed pass documents the existing product rather than inventing flows from scratch.
+4. **Rails**: run `init-project.mjs` (non-destructive) for `AGENTS.md` + doc tree + empty `backlog.json`; **build/refresh the codegraph index**. Hooks/CI already landed in step 1 — keep the bundled CI workflow unless the repo already has a stronger equivalent, the same rule `bootstrap-project` uses. If coverage tooling is missing, run `node scripts/coverage.mjs --setup`, present the diff, and ask before installing the new dependency or committing.
+5. **Contract**: reconcile existing work into `backlog.json` — existing tracker items (epics/sub-issues) become epics/stories with `gh_issue`; orphan roadmap items become stories. **Seed status from the most authoritative source (ledgers/commits), not stale tracker state.** No PRD is required (per Gate-in), so a reconciled story legitimately has no `prd_ref` — don't invent a requirement id to satisfy the schema.
+6. **Dedup**: merge duplicate tracking universes (e.g. roadmap slices vs tracker sub-issues) — never double-count.
+7. **Cut over**: repoint the dashboard to `backlog.json`; archive old progress files.
+8. **Re-stamp**: `node scripts/sync-plugin.mjs --apply` again, now that `backlog.json` reflects reality — this is what makes `legacyContractGrace` (missing `prd_ref` warns instead of hard-fails) accurate; step 1's stamp saw an empty backlog and couldn't grant it yet.
+9. **Labels**: if any reconciled item carries a `gh_issue`, create the `epic`/`feature` workflow labels if missing — same rule `bootstrap-project` applies for an explicit `tracker: github` choice.
+10. **Verify** (subagent): `validate.mjs` passes (a `WARN`-only exit for legacy `prd_ref` gaps counts as passing); rollups match reality; counts cross-check vs the old tracker.
 
 ## Outputs
 - Rails + `AGENTS.md` + a populated, validated `backlog.json` + a working dashboard; old trackers archived.
 
 ## Automated gate
-- `validate.mjs` exits 0; every existing tracked item is represented exactly once.
+- `validate.mjs` exits 0 (`WARN`-only for legacy `prd_ref` gaps counts as passing); every existing tracked item is represented exactly once.
 
 ## Human gate — G5 (adopt)
 - You approve the reconciled backlog + seeded statuses (the migration's G2/G5 collapse here for an existing PRD).

@@ -230,16 +230,18 @@ if (apply) {
   const pendingReview = results.flagged.map((f) => f.rel);
   // Never claim the project is at the new version while files are still unresolved —
   // "is this project behind" has to stay honest even after a partial sync.
-  // A project's first-ever stamp (no prior version on record) may be adopting the
-  // tracked-version flow for the first time with data written before prd_ref/acceptance/
-  // done-verify became required. Grant a one-time grace on exactly those checks, but only
-  // if the project's actual backlog.json has data that would trip them — a fresh,
-  // already-compliant project running this for the first time gets no grace it doesn't
-  // need. Once granted, only a human clears it (by backfilling through the normal
-  // workflow, never by hand-editing backlog.json), so later syncs preserve it as-is.
-  const legacyContractGrace = previous
-    ? previous.legacyContractGrace === true
-    : hasPreexistingContractGaps();
+  // A project adopting the tracked-version flow may have data written before
+  // prd_ref/acceptance/done-verify became required. Grant grace on exactly those checks
+  // once the project's actual backlog.json shows data that would trip them. This is
+  // deliberately re-checked on every --apply while still false, not just the first-ever
+  // stamp: adopt-project calls this before backlog.json is populated (to bootstrap the
+  // tooling itself) and again after (once the reconciled contract exists) — the first
+  // call would see an empty backlog and correctly grant nothing yet; the second call is
+  // what has to actually catch the real gaps. Once granted, it flips sticky: only a human
+  // clears it (by backfilling through the normal workflow, never by hand-editing
+  // backlog.json), so a later sync can never silently re-lock strict enforcement on a
+  // project mid-backfill.
+  const legacyContractGrace = previous?.legacyContractGrace === true || hasPreexistingContractGaps();
   const versionRecord = {
     version: pendingReview.length ? (previous?.version ?? null) : pluginPkg.version,
     syncedAt: new Date().toISOString(),

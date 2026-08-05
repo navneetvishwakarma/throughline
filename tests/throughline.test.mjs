@@ -841,6 +841,73 @@ test('sync-plugin.mjs refreshes an already-installed git pre-commit hook when .g
   }
 });
 
+test('sync-plugin.mjs installs a pre-commit hook for the first time, not just refreshes an existing one', () => {
+  const root = makeProject('sync-hook-first-install');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    assert.equal(existsSync(join(root, '.git/hooks/pre-commit')), false, 'no hook installed yet');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(existsSync(join(root, '.git/hooks/pre-commit')), true, 'first-time install must happen, not just refresh');
+    assert.equal(readFileSync(join(root, '.git/hooks/pre-commit'), 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs recomputes legacyContractGrace on a later --apply once backlog.json goes from empty to containing real gaps (the adopt-project two-phase case)', () => {
+  const root = makeProject('sync-grace-two-phase');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), { schema: 2, project: 'Fixture', prd: 'docs/product/06-prd.md', epics: [], stories: [] });
+    const first = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(first.status, 0, first.stderr || first.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8')).legacyContractGrace, false, 'nothing to grace yet -- backlog is still empty');
+
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{ id: 'S-1', title: 'Reconciled from GH issue', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0, gh_issue: 12 }],
+    }));
+    const second = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8')).legacyContractGrace, true, 'the second call must catch the now-real gap the first call could not see yet');
+
+    const validate = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(validate.status, 0, validate.stderr || validate.stdout);
+    assert.match(validate.stdout, /WARN 1 legacy-contract gap/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a bare git repo with nothing but a hand-copied sync-plugin.mjs can bootstrap its own full scaffold, matching adopt-project step 1', () => {
+  const root = join(tmpdir(), `throughline-adopt-bootstrap-${process.pid}-${Date.now()}`);
+  mkdirSync(root, { recursive: true });
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    mkdirSync(join(root, 'scripts'), { recursive: true });
+    copyFileSync(join(assetsRoot, 'scripts/sync-plugin.mjs'), join(root, 'scripts/sync-plugin.mjs'));
+
+    const dryRun = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot]);
+    assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
+    assert.equal(existsSync(join(root, 'scripts/validate.mjs')), false, 'report-only must not have written anything yet');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    for (const rel of ['scripts/validate.mjs', 'scripts/ensure-branch.mjs', 'scripts/init-project.mjs', 'scripts/coverage.mjs', '.githooks/pre-commit', 'docs/engineering/backlog.schema.json']) {
+      assert.equal(existsSync(join(root, rel)), true, rel + ' must exist after --apply');
+    }
+    assert.equal(existsSync(join(root, '.git/hooks/pre-commit')), true, 'the live hook must be installed, not just the source copy');
+
+    const branchCheck = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=adopt-project']);
+    assert.equal(branchCheck.status, 0, branchCheck.stderr || branchCheck.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('sync-plugin.mjs restores a deleted backlog.seed.json so a re-run of init-project.mjs does not crash', () => {
   const root = makeProject('sync-seed');
   try {
