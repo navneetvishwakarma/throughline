@@ -67,6 +67,18 @@
         { "text": "Asks before installing a new devDependency (via `--setup`) rather than installing silently." },
         { "text": "ship-epic blocks the merge when `node scripts/coverage.mjs --check --reuse` fails or reports `needs_setup`." }
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "The repo is currently checked out on main with no other branches. Fix a small bug in an already-shipped epic and land the fix. Do not use ship-epic — this isn't a tracked epic.",
+      "expected_output": "The very first action switches off main onto a new branch before any file is touched or committed. The fix lands via ship-feature (not ship-epic, not a raw `git push`), gated the same way ship-epic gates a merge — build/test, security lens where relevant, and an explicit human approval before the merge actually happens.",
+      "files": [],
+      "assertions": [
+        { "text": "Creates and switches to a feature branch before writing or committing anything, without being asked to." },
+        { "text": "Never commits directly on main." },
+        { "text": "Uses ship-feature, not ship-epic, since the fix isn't tracked as a backlog epic." },
+        { "text": "Does not push to remote or merge without an explicit human approval." }
+      ]
     }
   ]
 }

@@ -92,7 +92,7 @@ function readDir(path) {
 }
 
 function checkScriptSyntax() {
-  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs', 'sync-plugin.mjs', 'check-docs.mjs']) {
+  for (const script of ['init-project.mjs', 'validate.mjs', 'sync-status.mjs', 'build-dashboard.mjs', 'gate.mjs', 'coverage.mjs', 'sync-plugin.mjs', 'check-docs.mjs', 'ensure-branch.mjs']) {
     run(root, [process.execPath, '--check', join(assetsRoot, 'scripts', script)]);
   }
 }

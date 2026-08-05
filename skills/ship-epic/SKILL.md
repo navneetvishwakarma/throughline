@@ -10,6 +10,9 @@ Act as a top-0.1% FAANG senior developer landing clean. Consult a security lens 
 ## Gate-in
 Epic quality gate passed (all stories' `verify.ci: pass` in `backlog.json`; ledger complete). If not: stop and run `implement-epic` to completion first. If `docs/engineering/backlog.json`'s `coverage.mode` is `enforce`, also run `node scripts/coverage.mjs --check --reuse` — it validates the summary implement-epic already wrote without re-running the full suite. If it fails: stop and send the epic back to `implement-epic`.
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=ship-epic --name=epic/<epic-id>-<slug>`. This should be a no-op — `implement-epic` already left you on that branch — but it's a safety net against a stale `main` checkout if this runs standalone.
+
 ## Context protocol
 Work from the epic branch diff + ledger. If a codegraph index is present (`.codegraph/`), query it for impact/blast-radius of the change; read only the spans returned. Do not re-read source files or whole docs.
 

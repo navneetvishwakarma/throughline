@@ -149,6 +149,7 @@ const FILES = [
   'scripts/build-dashboard.mjs',
   'scripts/coverage.mjs',
   'scripts/check-docs.mjs',
+  'scripts/ensure-branch.mjs',
   'scripts/init-project.mjs',
   'scripts/sync-plugin.mjs',
   'docs/engineering/workflow.md',
@@ -208,16 +209,42 @@ if (apply && existsSync(join(root, '.git')) && existsSync(join(root, '.githooks/
   }
 }
 
+// Heuristic subset of validate.mjs's newly-added requirements (prd_ref, acceptance, done
+// verify evidence) — just enough to detect whether a project's existing backlog.json
+// predates them, without importing validate.mjs's internals.
+function hasPreexistingContractGaps() {
+  try {
+    const backlog = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    return (backlog.stories || []).some((s) => {
+      if (!s.prd_ref) return true;
+      if (!s.acceptance || !String(s.acceptance).trim()) return true;
+      if (s.status === 'done' && (s.verify?.ci !== 'pass' || !s.verify?.commit)) return true;
+      return false;
+    });
+  } catch { return false; }
+}
+
 if (apply) {
   const versionPath = join(root, '.throughline/plugin-version.json');
   const previous = (() => { try { return JSON.parse(readFileSync(versionPath, 'utf8')); } catch { return null; } })();
   const pendingReview = results.flagged.map((f) => f.rel);
   // Never claim the project is at the new version while files are still unresolved —
   // "is this project behind" has to stay honest even after a partial sync.
+  // A project's first-ever stamp (no prior version on record) may be adopting the
+  // tracked-version flow for the first time with data written before prd_ref/acceptance/
+  // done-verify became required. Grant a one-time grace on exactly those checks, but only
+  // if the project's actual backlog.json has data that would trip them — a fresh,
+  // already-compliant project running this for the first time gets no grace it doesn't
+  // need. Once granted, only a human clears it (by backfilling through the normal
+  // workflow, never by hand-editing backlog.json), so later syncs preserve it as-is.
+  const legacyContractGrace = previous
+    ? previous.legacyContractGrace === true
+    : hasPreexistingContractGaps();
   const versionRecord = {
     version: pendingReview.length ? (previous?.version ?? null) : pluginPkg.version,
     syncedAt: new Date().toISOString(),
     pendingReview,
+    legacyContractGrace,
   };
   mkdirSync(dirname(versionPath), { recursive: true });
   writeFileSync(versionPath, JSON.stringify(versionRecord, null, 2) + '\n', 'utf8');

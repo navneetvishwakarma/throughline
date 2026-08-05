@@ -10,6 +10,9 @@ Act as a top-0.1% FAANG principal architect. Design the simplest system that sat
 ## Gate-in
 `docs/product/06-prd.md` is `status: approved`. If not, stop and say so.
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=define-architecture` before anything else below. If the repo is on `main`/`master`, it creates and switches to a feature branch automatically and reports the name — never write or commit on `main` directly. Already on a non-main branch: no-op.
+
 ## Mode — seed vs. reconcile (architecture review)
 **Seed** if `docs/architecture/01-system-overview.md` is not `status: approved` — author fresh. **Reconcile** once it is `approved` — this is an **architecture review** pass over the new release's `REQ-xx`, not a fresh design. A v2+ pass never regenerates `02-tech-stack.md`/`03-data-model.md`/`05-api-design.md` from scratch — it amends them and appends ADRs, mirroring `define-backlog`'s append-only philosophy.
 

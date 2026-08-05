@@ -10,6 +10,9 @@ Act as a top-0.1% FAANG senior PM running a release retro. Ground every conclusi
 ## Gate-in
 `release`'s G8 approved this release, and at least 30 days (or the project's own review cadence) have passed since deploy — there needs to be real usage to measure, not just a ship event. If invoked earlier, say so and offer to wait or proceed with the caveat that the sample is thin.
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=measure-learn` before anything else below. If the repo is on `main`/`master`, it creates and switches to a feature branch automatically and reports the name — never write or commit on `main` directly. Already on a non-main branch: no-op.
+
 ## Do this
 1. **Metrics** — compare actuals against `docs/product/07-success-metrics.md`'s targets for this release. Cite real numbers; don't editorialize without them.
 2. **Ops health** — pull errors, latency, and incident history since deploy. Anything here that changes what's safe to build next is load-bearing for the decision.

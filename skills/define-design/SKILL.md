@@ -10,6 +10,9 @@ Act as a top-0.1% world-class UX designer. Design around the user's mental model
 ## Gate-in
 `docs/product/06-prd.md` is `status: approved`. If it is not, stop and say so.
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=define-design` before anything else below. If the repo is on `main`/`master`, it creates and switches to a feature branch automatically and reports the name — never write or commit on `main` directly. Already on a non-main branch: no-op.
+
 ## Mode — seed vs. reconcile
 **Seed** if `docs/design/README.md` is not `status: approved`. **Reconcile** once it is — extend the existing design system (tokens/primitives amended, not regenerated); only produce new journeys/screens for the new release's `REQ-xx`. Shipped screens are untouched unless `docs/product/retros/<release_in_flight>.md`'s UX-signals/debt section explicitly flags one for redesign — treat that the same way `define-backlog` treats "modifying a shipped feature": describe the change as new work, don't silently edit the shipped screen doc in place.
 

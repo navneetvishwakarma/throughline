@@ -80,7 +80,12 @@ and the project's existing scaffold files — never the whole codebase.
    for the human rather than merged or overwritten.
 6. `node scripts/validate.mjs` — confirms the project's actual `backlog.json` is
    still compatible with whatever new schema/script logic just landed, and also
-   fails loud if any working state is still misplaced outside `.throughline/`.
+   fails loud if any working state is still misplaced outside `.throughline/`. A
+   project's first-ever sync that turns up pre-existing stories missing a
+   requirement added since (`prd_ref`, `acceptance`, done-story verify evidence)
+   gets `.throughline/plugin-version.json` stamped with `legacyContractGrace: true`;
+   `validate.mjs` then reports those as `WARN` lines and still exits 0 — a complete,
+   non-failing outcome, not something to patch around.
 7. `.throughline/plugin-version.json` is written/updated. If any file is still
    **needs review** (unresolved) at the end of this run, the recorded `version`
    stays at whatever it was before (or `null` on a first sync) and a `pendingReview`
@@ -119,5 +124,6 @@ and the project's existing scaffold files — never the whole codebase.
 - A **needs review** file gets force-overwritten without the human actually looking
   at the diff → the exact clobbering this skill exists to prevent. Never batch
   `--force` across files the human hasn't individually confirmed.
-- `validate.mjs` fails after sync → stop, fix the incompatibility, never hand-edit
-  the contract to route around a real schema mismatch.
+- `validate.mjs` fails (exit 1) after sync → stop, fix the incompatibility, never
+  hand-edit the contract to route around a real schema mismatch. A `WARN`-only exit
+  0 (legacy grace) is not this failure mode — see step 6.

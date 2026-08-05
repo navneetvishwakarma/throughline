@@ -12,6 +12,17 @@ const STORY_RE = /^S-[0-9]+[a-z]?$/;
 const REQ_RE = /^REQ-[0-9]+$/;
 const errors = [];
 const err = (m) => errors.push(m);
+const warnings = [];
+const warn = (m) => warnings.push(m);
+// A project adopting the tracked-version flow for the first time (see sync-plugin.mjs)
+// gets a one-time grace period on requirements added after its data was already written:
+// missing prd_ref/acceptance and done-story verify evidence become warnings, not failures.
+// Structural invariants (ids, references, cycles, PRD gate, coverage-enforce) are never graced.
+let legacyContractGrace = false;
+try {
+  const stamp = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+  legacyContractGrace = stamp?.legacyContractGrace === true;
+} catch {}
 
 // Skill working state (epic/ship ledgers, gates) belongs only under .throughline/ —
 // every agent (Claude, Codex, Antigravity, Cursor, Gemini) reads that one location the
@@ -76,14 +87,15 @@ const ids = new Set();
   if (!s.title) err(at + ': title is required');
   if (!s.epic || !EPIC_RE.test(s.epic)) err(at + ': epic is required and must match ' + EPIC_RE);
   else if (epicIds.size && !epicIds.has(s.epic)) err(at + ": epic '" + s.epic + "' is not declared in epics[]");
-  if (!s.prd_ref) err(at + ': prd_ref is required');
-  else if (!REQ_RE.test(s.prd_ref)) err(at + ": prd_ref '" + s.prd_ref + "' must match " + REQ_RE);
-  if (!s.acceptance || !String(s.acceptance).trim()) err(at + ': acceptance is required');
+  const prdRefs = Array.isArray(s.prd_ref) ? s.prd_ref : s.prd_ref ? [s.prd_ref] : [];
+  if (!prdRefs.length) { const msg = at + ': prd_ref is required'; legacyContractGrace ? warn(msg) : err(msg); }
+  else prdRefs.forEach((r) => { if (!REQ_RE.test(r)) err(at + ": prd_ref '" + r + "' must match " + REQ_RE); });
+  if (!s.acceptance || !String(s.acceptance).trim()) { const msg = at + ': acceptance is required'; legacyContractGrace ? warn(msg) : err(msg); }
   if (!STATUS.includes(s.status)) err(at + ': status must be one of ' + STATUS.join('|'));
   if (typeof s.order !== 'number') err(at + ': order must be a number');
-  if (!Array.isArray(s.blocked_by)) err(at + ': blocked_by must be an array');
+  if (s.blocked_by !== undefined && !Array.isArray(s.blocked_by)) err(at + ': blocked_by must be an array');
   if (s.design_ref && !existsSync(join(root, s.design_ref))) err(at + ": design_ref '" + s.design_ref + "' does not point at a real file");
-  if (s.status === 'done' && (s.verify?.ci !== 'pass' || !s.verify?.commit)) err(at + ': done stories require verify.ci pass and verify.commit');
+  if (s.status === 'done' && (s.verify?.ci !== 'pass' || !s.verify?.commit)) { const msg = at + ': done stories require verify.ci pass and verify.commit'; legacyContractGrace ? warn(msg) : err(msg); }
   if (s.status === 'done' && data.coverage?.mode === 'enforce') {
     const min = data.coverage.min ?? 0.7;
     if (s.verify?.coverage == null) err(at + ': done stories require verify.coverage (coverage.mode is enforce) — run node scripts/coverage.mjs --story ' + s.id);
@@ -91,7 +103,7 @@ const ids = new Set();
   }
 });
 (data.stories || []).forEach((s) => {
-  (s.blocked_by || []).forEach((dep) => {
+  (Array.isArray(s.blocked_by) ? s.blocked_by : []).forEach((dep) => {
     if (dep === s.id) err(s.id + ': cannot depend on itself');
     else if (!ids.has(dep)) err(s.id + ": blocked_by references unknown story '" + dep + "'");
   });
@@ -106,7 +118,7 @@ function visit(id, stack) {
   if (visited.has(id)) return;
   visiting.add(id);
   const story = (data.stories || []).find((s) => s.id === id);
-  (story?.blocked_by || []).forEach((dep) => visit(dep, stack.concat(dep)));
+  (Array.isArray(story?.blocked_by) ? story.blocked_by : []).forEach((dep) => visit(dep, stack.concat(dep)));
   visiting.delete(id);
   visited.add(id);
 }
@@ -114,4 +126,8 @@ function visit(id, stack) {
 const ews = new Set((data.stories || []).map((s) => s.epic));
 (data.epics || []).forEach((e) => { if (e.id && !ews.has(e.id)) err(e.id + ': epic has no stories'); });
 if (errors.length) { console.error('FAIL backlog.json invalid — ' + errors.length + ' error(s):'); errors.forEach((e) => console.error('  - ' + e)); process.exit(1); }
+if (warnings.length) {
+  console.log('WARN ' + warnings.length + ' legacy-contract gap(s) (legacyContractGrace active — backfill via the normal workflow, not by hand-editing backlog.json):');
+  warnings.forEach((w) => console.log('  - ' + w));
+}
 console.log('OK backlog.json valid — ' + epicIds.size + ' epics, ' + ids.size + ' stories.');

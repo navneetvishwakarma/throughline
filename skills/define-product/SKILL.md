@@ -10,6 +10,9 @@ Act as a top-0.1% senior PM: testable, unambiguous requirements; non-goals defen
 ## Gate-in
 `docs/product/00-brief.md` is `status: approved`. If a spike ran (`00b-validation.md`), its decision must be `proceed`. (For v2+, `define-brief`'s own gate-in already checked the previous release's retro before this brief could be approved — nothing further to check here.)
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=define-product` before anything else below. If the repo is on `main`/`master`, it creates and switches to a feature branch automatically and reports the name — never write or commit on `main` directly. Already on a non-main branch: no-op.
+
 ## Mode — seed vs. reconcile
 **Seed** when `docs/product/06-prd.md` is not `status: approved` (fresh product, or a brownfield repo `adopt-project` brought on without ever running this skill — `adopt-project` never touches the PRD's status, so this stays the reliable signal regardless of what's already in `backlog.json`). **Reconcile** once it is `approved` — the same file this skill itself owns and sets at its own gate, so no other skill can put it in the wrong mode.
 
