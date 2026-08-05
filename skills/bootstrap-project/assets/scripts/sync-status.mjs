@@ -6,11 +6,27 @@ const root = process.cwd();
 const backlogPath = join(root, 'docs/engineering/backlog.json');
 const throughlineDir = join(root, '.throughline');
 const data = JSON.parse(readFileSync(backlogPath, 'utf8'));
-const tracker = data.tracker || 'local';
 const supportedTrackers = ['local', 'github'];
+// A project whose stories/epics already carry gh_issue numbers is de-facto GitHub-tracked
+// even if it predates the `tracker` field (added after some projects already had gh_issue
+// data). Defaulting silently to 'local' would stop GitHub sync with no signal at all.
+// Infer 'github' from that evidence instead, and persist it in the write below -- this
+// script already owns writing tracker-derived state back into backlog.json, unlike
+// validate.mjs/upgrade-project, which never touch it.
+let tracker = data.tracker;
+let trackerInferred = false;
+if (!tracker) {
+  const hasGhIssue = (data.epics || []).some((e) => e.gh_issue != null) || (data.stories || []).some((s) => s.gh_issue != null);
+  tracker = hasGhIssue ? 'github' : 'local';
+  trackerInferred = hasGhIssue;
+}
 if (!supportedTrackers.includes(tracker)) {
   console.error('Unsupported tracker ' + JSON.stringify(tracker) + '. Supported trackers: ' + supportedTrackers.join(', '));
   process.exit(1);
+}
+if (trackerInferred) {
+  data.tracker = tracker;
+  console.log('NOTE tracker was unset but gh_issue data exists — inferred and persisted tracker=github. Set it explicitly in backlog.json to silence this notice.');
 }
 // GitHub adapter: scan .throughline/ship-*/issue-*.json.
 const ghState = new Map();

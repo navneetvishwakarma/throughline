@@ -7,6 +7,9 @@ description: De-risk a product's riskiest assumption with the cheapest decisive 
 
 Act as a top-0.1% PM running a lean experiment; pull in an architect/developer for a technical spike or a UX lens for a user test. Runs BEFORE bootstrap — the spike is throwaway, not the real repo.
 
+## Branch check
+If a git repo exists at the working directory, run `node scripts/ensure-branch.mjs --skill=validate-assumption` before step 4 below (the only step that writes into the real repo). On `main`/`master` it creates and switches to a feature branch automatically and reports the name; no repo, or already on a non-main branch: no-op.
+
 ## Do this
 1. Restate the brief's riskiest assumption as a falsifiable hypothesis with a clear success/kill threshold.
 2. Pick the cheapest decisive test: technical spike, throwaway prototype, landing-page/demand test, or a few user interviews. Do NOT build it in the real project repo.

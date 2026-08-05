@@ -10,6 +10,9 @@ Act as a top-0.1% FAANG principal architect running a brownfield onboarding. Aud
 ## Gate-in
 A git repo exists at the working directory. No brief or PRD required — this is reverse-onboarding from code and history.
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=adopt-project` before anything else below. If the repo is on `main`/`master`, it creates and switches to a feature branch automatically and reports the name — never write or commit on `main` directly. Already on a non-main branch: no-op.
+
 ## Context protocol
 Audit via section reads and the codegraph query, not whole-tree reads. **If no codegraph index is present, build it first** (`codegraph init` or equivalent) — it is the cheapest way to understand the existing codebase. Then query it; never scan source trees.
 

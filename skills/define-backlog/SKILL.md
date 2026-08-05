@@ -10,6 +10,9 @@ Act as a top-0.1% PM (slice for fastest validation, order by value/risk); consul
 ## Gate-in
 PRD is `status: approved`; requirements carry `REQ-xx` ids + acceptance. If the project has `scripts/gate.mjs`, `node scripts/gate.mjs check G2` must pass.
 
+## Branch check
+Run `node scripts/ensure-branch.mjs --skill=define-backlog` before anything else below. If the repo is on `main`/`master`, it creates and switches to a feature branch automatically and reports the name — never write or commit on `main` directly. Already on a non-main branch: no-op.
+
 ## Model
 - **Epic** = a vertically-sliced shippable increment grouping stories. Epics are what define-epic consumes.
 - **Story** = a leaf work item; carries status. Read `docs/engineering/workflow.md` for field ownership and the status enum — never violate it.

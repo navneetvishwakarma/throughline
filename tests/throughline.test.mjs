@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -80,6 +80,45 @@ test('validate rejects story without requirement trace and acceptance', () => {
   }
 });
 
+test('validate.mjs accepts a story prd_ref as an array, matching epic.prd_ref', () => {
+  const root = makeProject('story-prd-ref-array');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: ['REQ-01'],
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'notstarted', order: 0,
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs treats an absent blocked_by as no dependencies, but still rejects a wrong-typed one', () => {
+  const root = makeProject('story-blocked-by-absent');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{ id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', status: 'notstarted', order: 0 }],
+    }));
+    const absent = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(absent.status, 0, absent.stderr || absent.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{ id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: 'S-2', status: 'notstarted', order: 0 }],
+    }));
+    const wrongType = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(wrongType.status, 0);
+    assert.match(wrongType.stderr, /blocked_by must be an array/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate rejects backlog stories before PRD approval', () => {
   const root = makeProject('prd-gate');
   try {
@@ -114,6 +153,34 @@ test('validate rejects cyclic story dependencies', () => {
   }
 });
 
+test('validate.mjs downgrades legacy-contract gaps to WARN when legacyContractGrace is set, but hard-fails the same data without it', () => {
+  const root = makeProject('legacy-contract-grace');
+  try {
+    approvePrd(root);
+    const legacyBacklog = baseBacklog({
+      stories: [
+        { id: 'S-1', title: 'No trace', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 },
+        { id: 'S-2', title: 'Old done work', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'It shipped.', blocked_by: [], status: 'done', order: 1 },
+      ],
+    });
+    writeJson(join(root, 'docs/engineering/backlog.json'), legacyBacklog);
+
+    const withoutGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withoutGrace.status, 0);
+    assert.match(withoutGrace.stderr, /prd_ref is required/);
+    assert.match(withoutGrace.stderr, /done stories require verify\.ci pass/);
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(withGrace.status, 0, withGrace.stderr || withGrace.stdout);
+    assert.match(withGrace.stdout, /WARN 2 legacy-contract gap/);
+    assert.match(withGrace.stdout, /prd_ref is required/);
+    assert.match(withGrace.stdout, /done stories require verify\.ci pass/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('sync-status rejects unimplemented tracker adapters', () => {
   const root = makeProject('unsupported-tracker');
   try {
@@ -124,6 +191,36 @@ test('sync-status rejects unimplemented tracker adapters', () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Unsupported tracker/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs infers and persists tracker=github when gh_issue data exists but tracker is unset, and leaves a tracker-less/gh_issue-less backlog defaulting to local', () => {
+  const root = makeProject('sync-status-tracker-infer');
+  try {
+    approvePrd(root);
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    const withGhIssue = baseBacklog({
+      stories: [{ id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: [], status: 'notstarted', order: 0, gh_issue: 42 }],
+    });
+    delete withGhIssue.tracker;
+    writeJson(backlogPath, withGhIssue);
+
+    const inferred = runNode(root, join(root, 'scripts/sync-status.mjs'));
+    assert.equal(inferred.status, 0, inferred.stderr || inferred.stdout);
+    assert.match(inferred.stdout, /inferred and persisted tracker=github/);
+    assert.match(inferred.stdout, /tracker=github/);
+    assert.equal(JSON.parse(readFileSync(backlogPath, 'utf8')).tracker, 'github');
+
+    const noGhIssue = baseBacklog();
+    delete noGhIssue.tracker;
+    writeJson(backlogPath, noGhIssue);
+    const defaulted = runNode(root, join(root, 'scripts/sync-status.mjs'));
+    assert.equal(defaulted.status, 0, defaulted.stderr || defaulted.stdout);
+    assert.doesNotMatch(defaulted.stdout, /inferred and persisted/);
+    assert.match(defaulted.stdout, /tracker=local/);
+    assert.equal(JSON.parse(readFileSync(backlogPath, 'utf8')).tracker, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -627,6 +724,59 @@ test('sync-plugin.mjs --apply adds a missing scaffold file and stamps plugin-ver
   }
 });
 
+test('sync-plugin.mjs stamps legacyContractGrace only on a first-ever sync whose existing backlog.json actually predates the newer requirements', () => {
+  const root = makeProject('sync-legacy-grace-adopted');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{ id: 'S-1', title: 'Old work', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 }],
+    }));
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const version = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+    assert.equal(version.legacyContractGrace, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs does not grant legacyContractGrace to a first-ever sync of an already-compliant backlog.json', () => {
+  const root = makeProject('sync-legacy-grace-compliant');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const version = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+    assert.equal(version.legacyContractGrace, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs preserves an already-granted legacyContractGrace on a later sync, even once the backlog becomes compliant', () => {
+  const root = makeProject('sync-legacy-grace-preserved');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{ id: 'S-1', title: 'Old work', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 }],
+    }));
+    const first = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(first.status, 0, first.stderr || first.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8')).legacyContractGrace, true);
+
+    // Backfill the missing prd_ref -- backlog.json is now fully compliant.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+    const second = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8')).legacyContractGrace, true, 'only a human clears the flag, not a later sync');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('sync-plugin.mjs never overwrites a locally-edited scaffold file without --force, and withholds the version stamp while it is unresolved', () => {
   const root = makeProject('sync-edited');
   try {
@@ -716,6 +866,117 @@ test('sync-plugin.mjs regenerates AGENTS.md preserving the project name already 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('ensure-branch.mjs no-ops when no git repo exists yet', () => {
+  const root = makeProject('ensure-branch-no-repo');
+  try {
+    const result = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=define-brief']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function initGitWithCommit(root) {
+  assert.equal(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: root, encoding: 'utf8' }).status, 0);
+  writeFileSync(join(root, 'seed.txt'), 'seed\n', 'utf8');
+  assert.equal(spawnSync('git', ['add', 'seed.txt'], { cwd: root, encoding: 'utf8' }).status, 0);
+  assert.equal(spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: root, encoding: 'utf8' }).status, 0);
+}
+
+function currentBranch(root) {
+  return spawnSync('git', ['branch', '--show-current'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+}
+
+test('ensure-branch.mjs auto-creates and switches off main, then is a no-op once off it', () => {
+  const root = makeProject('ensure-branch-auto');
+  try {
+    initGitWithCommit(root);
+    const first = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=define-brief']);
+    assert.equal(first.status, 0, first.stderr || first.stdout);
+    assert.match(first.stdout, /Created and switched to feature\/define-brief-/);
+    assert.match(currentBranch(root), /^feature\/define-brief-/);
+
+    const second = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=define-brief']);
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.match(second.stdout, /-- OK\.$/m);
+    assert.match(currentBranch(root), /^feature\/define-brief-/, 'second run must not create yet another branch');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ensure-branch.mjs --name always lands on that exact branch: create, switch, and no-op cases', () => {
+  const root = makeProject('ensure-branch-named');
+  try {
+    initGitWithCommit(root);
+
+    const created = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=define-epic', '--name=epic/E-1-thing']);
+    assert.equal(created.status, 0, created.stderr || created.stdout);
+    assert.match(created.stdout, /Created and switched to epic\/E-1-thing/);
+    assert.equal(currentBranch(root), 'epic/E-1-thing');
+
+    const noop = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=epic/E-1-thing']);
+    assert.equal(noop.status, 0, noop.stderr || noop.stdout);
+    assert.match(noop.stdout, /On epic\/E-1-thing already/);
+
+    assert.equal(spawnSync('git', ['checkout', '-q', 'main'], { cwd: root, encoding: 'utf8' }).status, 0);
+    const switched = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=epic/E-1-thing']);
+    assert.equal(switched.status, 0, switched.stderr || switched.stdout);
+    assert.match(switched.stdout, /^Switched to epic\/E-1-thing/m);
+    assert.equal(currentBranch(root), 'epic/E-1-thing');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ensure-branch.mjs --check-only blocks on main/master without mutating, and passes off it', () => {
+  const root = makeProject('ensure-branch-check-only');
+  try {
+    initGitWithCommit(root);
+    const onMain = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--check-only']);
+    assert.notEqual(onMain.status, 0);
+    assert.match(onMain.stderr, /never commits directly to main/);
+    assert.equal(currentBranch(root), 'main', '--check-only must never create or switch branches');
+
+    assert.equal(spawnSync('git', ['checkout', '-qb', 'some/work'], { cwd: root, encoding: 'utf8' }).status, 0);
+    const offMain = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--check-only']);
+    assert.equal(offMain.status, 0, offMain.stderr || offMain.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the bundled pre-commit hook rejects a commit on main via ensure-branch.mjs --check-only, and allows it off main', () => {
+  const root = makeProject('pre-commit-branch-backstop');
+  try {
+    initGitWithCommit(root);
+    const hookDest = join(root, '.git/hooks/pre-commit');
+    copyFileSync(join(root, '.githooks/pre-commit'), hookDest);
+    try { chmodSync(hookDest, 0o755); } catch {}
+
+    writeFileSync(join(root, 'change.txt'), 'change\n', 'utf8');
+    spawnSync('git', ['add', 'change.txt'], { cwd: root, encoding: 'utf8' });
+    const blocked = spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'change on main'], { cwd: root, encoding: 'utf8' });
+    assert.notEqual(blocked.status, 0, 'commit on main must be rejected by the hook');
+    assert.match(blocked.stderr + blocked.stdout, /never commits directly to main/);
+
+    assert.equal(spawnSync('git', ['checkout', '-qb', 'feature/change'], { cwd: root, encoding: 'utf8' }).status, 0);
+    const allowed = spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'change on feature branch'], { cwd: root, encoding: 'utf8' });
+    assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ship-feature exists alongside ship-epic and scopes G7 by feature slug instead of an epic id', () => {
+  const skillPath = join(repoRoot, 'skills/ship-feature/SKILL.md');
+  assert.equal(existsSync(skillPath), true);
+  const text = readFileSync(skillPath, 'utf8');
+  assert.match(text, /name: ship-feature/);
+  assert.match(text, /--subject <feature-slug>/);
+  assert.match(text, /ensure-branch\.mjs --check-only/);
 });
 
 test('validate.mjs fails loud when epic working state is written under .claude/ instead of .throughline/', () => {

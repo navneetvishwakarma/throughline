@@ -32,6 +32,7 @@ contract: `../../skills/bootstrap-project/assets/docs/engineering/backlog.schema
 | 9 | `09-release.md` | new | PM | G8 release approved |
 | 10 | `11-measure-learn.md` | new | PM | G9 retro decision confirmed |
 | 11 | `12-upgrade-project.md` | new | Developer | — (mechanical, per-file review) |
+| 12 | `13-ship-feature.md` | new | Developer | G7 PR merge (scoped by feature slug) |
 
 ## Shared template (every spec uses these headings)
 
@@ -100,4 +101,9 @@ prevents the same content being parsed again and again.
   `../../skills/bootstrap-project/assets/docs/engineering/workflow.md` — never violate.
 - Persona conflicts → **surface at the human gate**, never resolve silently.
 - Every skill ends with the repo in a `validate.mjs`-passing state.
+- **Branch discipline.** Every skill (except `release`, which runs after merge) opens
+  with `node scripts/ensure-branch.mjs --skill=<name>` — never write or commit directly
+  on `main`/`master`. `define-epic`/`implement-epic` share one `epic/<id>-<slug>` branch
+  via `--name=`. Pushing to remote only ever happens through `ship-epic` or
+  `ship-feature`; the pre-commit hook backstops this with `--check-only`.
 - **Reuse skills are optional accelerators.** Each spec is followable as plain instructions; if a named skill isn't installed (or the agent isn't Claude), perform the step directly from the spec. The **spec is the source of truth; the skill is a shortcut.** This keeps the workflow runnable by any coding agent.

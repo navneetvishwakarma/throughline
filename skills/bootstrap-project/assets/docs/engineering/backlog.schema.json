@@ -60,15 +60,15 @@
     },
     "story": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "title", "epic", "prd_ref", "acceptance", "blocked_by", "status", "order"],
+      "required": ["id", "title", "epic", "prd_ref", "acceptance", "status", "order"],
       "properties": {
         "id": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" },
         "title": { "type": "string", "minLength": 1 },
         "epic": { "type": "string", "pattern": "^E-[0-9]+$", "description": "REQUIRED. The epic this story belongs to." },
-        "prd_ref": { "type": "string", "pattern": "^REQ-[0-9]+$" },
+        "prd_ref": { "oneOf": [ { "type": "string", "pattern": "^REQ-[0-9]+$" }, { "type": "array", "items": { "type": "string", "pattern": "^REQ-[0-9]+$" } } ] },
         "gh_issue": { "type": ["integer", "null"] },
         "status": { "enum": ["notstarted", "in_progress", "blocked", "done"], "description": "Owned by the status adapter (sync-status with a tracker, or the skills in local mode). Never hand-edit casually." },
-        "blocked_by": { "type": "array", "items": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" } },
+        "blocked_by": { "type": "array", "items": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" }, "default": [], "description": "Story ids this depends on. Absence means no known dependencies." },
         "order": { "type": "integer" },
         "estimate": { "type": "number" },
         "acceptance": { "type": "string", "minLength": 1 },

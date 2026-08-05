@@ -10,6 +10,9 @@ Act as a top-0.1% senior product manager. Start from the user's problem and a me
 ## Gate-in (v2+)
 **Mode trigger:** if `docs/engineering/backlog.json` doesn't exist yet, this is cycle 1 — skip the rest of this section, bootstrap hasn't run. If it exists, resolve `<release>` from its `release_in_flight` field (the release just shipped — `define-product` won't advance it to the next tag until later in this cycle) and require `docs/product/retros/<release>.md` to exist with `status: recorded`. If its decision is **kill**, stop — a new brief is not started without an explicit user override. If **proceed** or **pivot**, ground this brief in the retro's metrics/UX-debt/decision rather than starting from a blank slate.
 
+## Branch check
+If a git repo exists (it may not — this can run before `bootstrap-project`), run `node scripts/ensure-branch.mjs --skill=define-brief` before anything else below. On `main`/`master` it creates and switches to a feature branch automatically and reports the name; no repo, or already on a non-main branch: no-op.
+
 ## Do this
 1. Interview the user until five things are crisp — do not pad:
    - **Problem** — what you're solving, in 1–2 sentences.

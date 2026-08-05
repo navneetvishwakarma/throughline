@@ -10,6 +10,9 @@ Act as a top-0.1% FAANG senior PM: what's shippable, release comms, go/no-go. Co
 ## Gate-in
 All epics tagged `release: vX` in `backlog.json` must roll up to `done` (derived from their stories). Verify this first; stop if any are incomplete. If `scripts/gate.mjs` exists, G7 must be approved.
 
+## Branch check
+None, deliberately — unlike every other skill, this one intentionally operates on `main`: it runs after the release's epics are already merged (G7), and tags/deploys the mainline itself. There is nothing here that belongs on a feature branch.
+
 ## Context protocol
 Build the changelog from the `backlog.json` epic slice + `.throughline/epic-*/ledger.md`. Never re-read source files or whole docs. If a codegraph index exists (`.codegraph/`), query it for any code reference; read only the spans returned.
 

@@ -21,14 +21,9 @@ Read `docs/engineering/backlog.json` (the chosen epic slice only). Read `.throug
 
 Determine the epic branch: `epic/<epic-id>-<slug>`.
 
-**If branch does not exist:**
-```bash
-git checkout main && git pull origin main
-git status   # must be clean — stop if dirty
-git checkout -b epic/<epic-id>-<slug>
-```
+**If branch does not exist:** `git checkout main && git pull origin main`, confirm `git status` is clean (stop if dirty — never carry unrelated changes onto a fresh epic branch), then run `node scripts/ensure-branch.mjs --skill=implement-epic --name=epic/<epic-id>-<slug>` to create and switch to it — the same branch-creation mechanism every other skill goes through, given the exact name this epic owns.
 
-**If branch exists:** ask whether to resume (skip committed stories) or start fresh. On resume: scan `git log --oneline` for commit messages containing the story id to detect already-done stories.
+**If branch exists** (typically because `define-epic` already created it and committed the specs there): ask whether to resume (skip committed stories) or start fresh. On resume: scan `git log --oneline` for commit messages containing the story id to detect already-done stories. Either way, `node scripts/ensure-branch.mjs --skill=implement-epic --name=epic/<epic-id>-<slug>` is a safe no-op if you're not already on it.
 
 ## Step 2 — For each story: plan → approve → dispatch
 

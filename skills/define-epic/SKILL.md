@@ -19,6 +19,10 @@ Load `AGENTS.md` + only the chosen epic's stories + their `prd_ref` requirement 
 
 Read `docs/engineering/backlog.json`. Select the epic with the lowest `order` whose stories all have satisfied `blocked_by` dependencies (every referenced story id is `done`). Report the chosen epic.
 
+## Step 1.5 — Branch check
+
+Run `node scripts/ensure-branch.mjs --skill=define-epic --name=epic/<epic-id>-<slug>` (same slug convention `implement-epic`/`ship-epic` use). This always lands you on exactly that branch — switching to it if it already exists (e.g. a prior `define-epic` run, or resuming), creating it fresh off the current branch if not, no-op if already there. This is deliberate, not the generic per-skill branch check: the specs written below must live on the *same* branch `implement-epic` continues on, not a throwaway one — `implement-epic` only re-forks from `main` when `epic/<epic-id>-<slug>` doesn't exist yet, so if these specs landed anywhere else and were never merged, they'd be silently orphaned.
+
 ## Step 2 — Expand each story
 
 For each child story of the chosen epic, write a per-story spec in `.throughline/epic-<N>/sub-<story-id>.json`:
