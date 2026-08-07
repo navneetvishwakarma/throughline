@@ -102,11 +102,24 @@ const ids = new Set();
     else if (s.verify.coverage < min) err(at + ': verify.coverage ' + s.verify.coverage + ' is below coverage.min ' + min);
   }
 });
+const storyById = new Map((data.stories || []).map((s) => [s.id, s]));
 (data.stories || []).forEach((s) => {
-  (Array.isArray(s.blocked_by) ? s.blocked_by : []).forEach((dep) => {
+  const deps = Array.isArray(s.blocked_by) ? s.blocked_by : [];
+  deps.forEach((dep) => {
     if (dep === s.id) err(s.id + ': cannot depend on itself');
     else if (!ids.has(dep)) err(s.id + ": blocked_by references unknown story '" + dep + "'");
   });
+  // Contradictory status: a merge-corruption signal, not just a schema violation.
+  // blocked must name the dependency it's waiting on (workflow.md: "blocked as an
+  // override when a dependency is unmet"); done must not outrun an open dependency
+  // (Definition of Ready: "All blocked_by dependencies are done").
+  if (s.status === 'blocked' && !deps.length) err(s.id + ": status is 'blocked' but blocked_by is empty");
+  if (s.status === 'done') {
+    deps.forEach((dep) => {
+      const depStatus = storyById.get(dep)?.status;
+      if (depStatus && depStatus !== 'done') err(s.id + ": status is 'done' but blocked_by dependency '" + dep + "' is not done (status: " + depStatus + ")");
+    });
+  }
 });
 const visiting = new Set(), visited = new Set();
 function visit(id, stack) {

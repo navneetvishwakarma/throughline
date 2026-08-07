@@ -189,7 +189,7 @@ A product is never re-scaffolded for its next release. `define-product`, `define
 - `define-backlog` reconciles once any epic/story carries a tracker issue — append-only, `release: v2` epics, shipped work untouched. In the same write, it advances `backlog.json`'s `release_in_flight` to the new release tag — deliberately not `define-product`'s job, since that would leave the field pointing at a release with no matching epic yet while `define-architecture`/`define-design` run in between, and both validate `backlog.json` as part of their own gates.
 - `measure-learn` (G9) closes the loop: once a release has real usage data, it writes `docs/product/retros/<release>.md` (metrics, ops health, UX debt, and a proceed/pivot/kill decision) that the next `define-brief` reads before starting a new cycle, resolving `<release>` from `release_in_flight` — the one field naming which release is currently being worked, so no skill has to infer it.
 
-The dashboard follows the same focus: its headline verdict and work board are scoped to `release_in_flight` only. Shipped releases (100% done) and upcoming ones collapse into a reference-if-needed `<details>` block each — a v1 that's fully done doesn't compete for attention with the v2 work actually happening now, but its epics are one click away, not gone.
+The dashboard follows the same focus: its headline verdict and work board are scoped to `release_in_flight` only. Shipped releases (100% done) and upcoming ones collapse into a reference-if-needed `<details>` block each — a v1 that's fully done doesn't compete for attention with the v2 work actually happening now, but its epics are one click away, not gone. Below the current-release focus, a Planning section renders the gate pipeline (`.throughline/gates.json`) and a roadmap across all releases, grouped by phase when `backlog.json` declares `phases[]`.
 
 ## Keeping a Project in Sync
 
@@ -375,6 +375,8 @@ Verify the source checkout:
 npm test
 npm run doctor
 ```
+
+`npm run test:coverage` runs the same suite with real coverage of every script it exercises — including `skills/bootstrap-project/assets/scripts/*.mjs`, which the tests spawn as child processes against throwaway fixture projects rather than requiring in-process (`node --test`'s own `--experimental-test-coverage` only instruments the parent process and misses those entirely). Report at `.coverage/report`; CI runs this on every PR.
 
 Verify a platform install without writing files:
 

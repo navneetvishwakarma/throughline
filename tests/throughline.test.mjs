@@ -119,6 +119,57 @@ test('validate.mjs treats an absent blocked_by as no dependencies, but still rej
   }
 });
 
+test('validate.mjs rejects a story marked blocked with no blocked_by dependency named (contradictory status)', () => {
+  const root = makeProject('blocked-status-no-deps');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{ id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: [], status: 'blocked', order: 0 }],
+    }));
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /status is 'blocked' but blocked_by is empty/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [
+        { id: 'S-1', title: 'Dep', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: [], status: 'notstarted', order: 0 },
+        { id: 'S-2', title: 'Blocked', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: ['S-1'], status: 'blocked', order: 1 },
+      ],
+    }));
+    const ok = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects a story marked done while a blocked_by dependency is not done (contradictory status)', () => {
+  const root = makeProject('done-status-open-dep');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [
+        { id: 'S-1', title: 'Dep', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: [], status: 'in_progress', order: 0 },
+        { id: 'S-2', title: 'Done too early', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: ['S-1'], status: 'done', verify: { ci: 'pass', commit: 'abc123' }, order: 1 },
+      ],
+    }));
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /status is 'done' but blocked_by dependency 'S-1' is not done \(status: in_progress\)/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [
+        { id: 'S-1', title: 'Dep', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: [], status: 'done', verify: { ci: 'pass', commit: 'abc123' }, order: 0 },
+        { id: 'S-2', title: 'Done for real', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: ['S-1'], status: 'done', verify: { ci: 'pass', commit: 'def456' }, order: 1 },
+      ],
+    }));
+    const ok = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate rejects backlog stories before PRD approval', () => {
   const root = makeProject('prd-gate');
   try {
@@ -1306,6 +1357,98 @@ test('build-dashboard.mjs treats an untagged epic as the implicit first release,
     // and behaves exactly like the pre-multi-release dashboard (no "Other releases" section).
     assert.doesNotMatch(html, /Other releases/);
     assert.match(html, /Epics &middot; v1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs Planning section renders a muted fallback when .throughline/gates.json is absent', () => {
+  const root = makeProject('dashboard-gates-absent');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /<h2>Planning<\/h2>/);
+    assert.match(html, /not tracked yet/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs Planning section renders a gate pipeline strip from .throughline/gates.json, marking the first non-approved gate current', () => {
+  const root = makeProject('dashboard-gates-present');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+    writeJson(join(root, '.throughline/gates.json'), {
+      gates: {
+        G1: { status: 'approved' },
+        'G1.5': { status: 'approved' },
+        G2: { status: 'rejected' },
+      },
+    });
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /<span class="gate approved" title="G1: approved">G1<\/span>/);
+    // G2 is the first non-approved gate (rejected still blocks the pipeline) -> "current".
+    assert.match(html, /<span class="gate rejected current" title="G2: rejected">G2<\/span>/);
+    // G3 has no entry at all -> defaults to pending, and is NOT current (G2 already claimed it).
+    assert.match(html, /<span class="gate pending" title="G3: pending">G3<\/span>/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs Roadmap falls back to a flat epic table when backlog.json has no phases', () => {
+  const root = makeProject('dashboard-roadmap-no-phases');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /<div class="roadmap">/);
+    assert.doesNotMatch(html, /class="phasegroup"/);
+    assert.match(html, /E-1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs Roadmap groups epics by phase, ordered by phases[].order, with unphased epics last', () => {
+  const root = makeProject('dashboard-roadmap-phases');
+  try {
+    writeJson(join(root, 'docs/engineering/backlog.json'), {
+      schema: 2, project: 'Fixture', prd: 'docs/product/06-prd.md', tracker: 'local',
+      phases: [
+        { id: 'discovery', name: 'Discovery', order: 1 },
+        { id: 'build', name: 'Build', order: 0 },
+      ],
+      epics: [
+        { id: 'E-1', title: 'Foundation', order: 0, phase: 'build', release: 'v1', prd_ref: 'REQ-01' },
+        { id: 'E-2', title: 'Research', order: 1, phase: 'discovery', release: 'v1', prd_ref: 'REQ-02' },
+        { id: 'E-3', title: 'Orphan', order: 2, release: 'v1', prd_ref: 'REQ-03' },
+      ],
+      stories: [
+        { id: 'S-1', title: 'x', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'x', blocked_by: [], status: 'notstarted', order: 0 },
+        { id: 'S-2', title: 'x', epic: 'E-2', prd_ref: 'REQ-02', acceptance: 'x', blocked_by: [], status: 'notstarted', order: 0 },
+        { id: 'S-3', title: 'x', epic: 'E-3', prd_ref: 'REQ-03', acceptance: 'x', blocked_by: [], status: 'notstarted', order: 0 },
+      ],
+    });
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    const roadmap = html.slice(html.indexOf('<div class="roadmap">'));
+    const buildAt = roadmap.indexOf('>Build<');
+    const discoveryAt = roadmap.indexOf('>Discovery<');
+    const unphasedAt = roadmap.indexOf('>Unphased<');
+    assert.ok(buildAt !== -1 && discoveryAt !== -1 && unphasedAt !== -1, roadmap);
+    // phases[].order: build(0) before discovery(1); unphased epics render last regardless.
+    assert.ok(buildAt < discoveryAt, 'Build phase must render before Discovery phase');
+    assert.ok(discoveryAt < unphasedAt, 'Unphased epics must render after named phases');
+    assert.ok(roadmap.indexOf('E-1') > buildAt && roadmap.indexOf('E-1') < discoveryAt);
+    assert.ok(roadmap.indexOf('E-2') > discoveryAt && roadmap.indexOf('E-2') < unphasedAt);
+    assert.ok(roadmap.indexOf('E-3') > unphasedAt);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
