@@ -5,7 +5,7 @@ description: Use when non-epic work (a hotfix, plugin/scaffold maintenance, a do
 
 # ship-feature
 
-Act as a top-0.1% FAANG senior developer landing clean. Consult a security lens on any PR touching auth, PII, or OAuth scopes — that gate is hard and can block the merge.
+Act as a top-0.1% FAANG senior developer landing clean: never merge on red CI, a failing quality gate, or an unresolved review finding. Consult a security lens on any PR touching auth, PII, or OAuth scopes — that gate is hard and can block the merge.
 
 ## Scope
 For anything tracked as a `backlog.json` epic, use `ship-epic` instead — it has epic-specific bookkeeping (subject-scoped gate, closing child GitHub issues) this skill doesn't do. That includes single stories spec'd/built via `define-feature`/`implement-feature` in **epic-linked mode**: they write to the same shared `epic/<epic-id>-<slug>` branch `implement-epic` uses, and an epic ships as one atomic unit via `ship-epic` once every story on it is done — never one story at a time through here. Use `ship-feature` for everything `define-feature`/`implement-feature` produce in **standalone mode**: hotfixes, plugin/scaffold maintenance, doc-only changes, and any work that never went through `define-epic`. This is the only other path allowed to push to remote — nothing pushes directly.
@@ -32,12 +32,14 @@ git merge --no-ff <branch> -m "merge: <feature-slug>"
 ```
 `--subject <feature-slug>` scopes the approval the same way `ship-epic` scopes it by epic id — a stale global G7 approval left over from a previously shipped epic or feature must never silently satisfy this one's merge.
 
-**3. Report** — fixed format, ≤4 lines:
+**3. Report** — fixed format, ≤5 lines:
 ```
 Merged: <branch> → main
 Summary: <one line>
 Residual risks: <list or "none">
+Personas: Developer[, Security]
 ```
+Include `Security` only if the diff actually touches auth, PII, or OAuth scopes (this skill's own persona line above is the trigger — Mode A has no separate numbered security step the way Mode B does).
 
 ---
 
@@ -77,12 +79,14 @@ node scripts/gate.mjs approve G7 --subject <feature-slug> --note "PR merge appro
 gh pr merge --merge --delete-branch
 ```
 
-**7. Report** — fixed format, ≤4 lines:
+**7. Report** — fixed format, ≤5 lines:
 ```
 Branch: <name> | PR: #<N> — <url> | Merge: <result>
 Residual risks: <list or "none">
 Skipped gates: <list or "none">
+Personas: Developer[, Security]
 ```
+Include `Security` only if step 2's security gate actually fired on this diff.
 
 ---
 

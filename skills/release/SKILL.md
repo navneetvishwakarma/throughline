@@ -5,7 +5,7 @@ description: Use when a wave of epics is done and the product is ready to ship t
 
 # release
 
-Act as a top-0.1% FAANG senior PM: what's shippable, release comms, go/no-go. Consult a security lens for final compliance and secrets check.
+Act as a top-0.1% FAANG senior PM running a go/no-go call. Block go on any unresolved QA failure or security must-fix — never let deadline pressure downgrade a red check to a footnote. Consult a security lens for final compliance and secrets check.
 
 ## Gate-in
 All epics tagged `release: vX` in `backlog.json` must roll up to `done` (derived from their stories). Verify this first; stop if any are incomplete. If `scripts/gate.mjs` exists, G7 must be approved.
@@ -34,7 +34,7 @@ Build the changelog from the `backlog.json` epic slice + `.throughline/epic-*/le
 Before presenting for G8: all release epics `done`; QA pass green; changelog generated; security pass clear (or must-fixes resolved); deploy succeeded; `node scripts/build-dashboard.mjs` exits 0.
 
 ## Gate (G8)
-Present the QA summary, changelog, and security check result. Ask the user for go/no-go. On go, confirm the tag is pushed and the deployment is live.
+Present the QA summary, changelog, and security check result, plus `Personas Applied: PM, Security`. Ask the user for go/no-go. On go, confirm the tag is pushed and the deployment is live. This line stays in the presentation only — `CHANGELOG.md` is user-facing release notes and never carries internal process metadata.
 
 ## Done when
 Version tagged + deployed; changelog + announcement produced; dashboard current; measure-and-learn scheduled; G8 approved.

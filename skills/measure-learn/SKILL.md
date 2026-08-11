@@ -17,7 +17,7 @@ Run `node scripts/ensure-branch.mjs --skill=measure-learn` before anything else 
 1. **Metrics** — compare actuals against `docs/product/07-success-metrics.md`'s targets for this release. Cite real numbers; don't editorialize without them.
 2. **Ops health** — pull errors, latency, and incident history since deploy. Anything here that changes what's safe to build next is load-bearing for the decision.
 3. **UX signals / debt** — usability issues, drop-off points, support themes. If something here means a shipped screen needs a redesign, say so explicitly — this is what the next `define-design` reconcile pass reads to know a shipped screen is back in scope.
-4. **Write the retro** — `docs/product/retros/<release>.md`, where `<release>` is `backlog.json`'s `release_in_flight` (the release just shipped — `define-product` hasn't advanced it to the next one yet). One file per release, never overwritten, following `docs/_templates/retro.template.md`'s shape: metrics vs. success criteria, ops health, UX signals/debt, and the decision.
+4. **Write the retro** — `docs/product/retros/<release>.md`, where `<release>` is `backlog.json`'s `release_in_flight` (the release just shipped — `define-product` hasn't advanced it to the next one yet). One file per release, never overwritten, following `docs/_templates/retro.template.md`'s shape: metrics vs. success criteria, ops health, UX signals/debt, and the decision. The template seeds `**Personas Applied:** PM, UX` — leave it as-is, both run unconditionally per this skill's own persona line above.
 5. **Decide** — proceed / pivot / kill, justified in 1-2 sentences, grounded in steps 1-3.
 
 ## Automated gate

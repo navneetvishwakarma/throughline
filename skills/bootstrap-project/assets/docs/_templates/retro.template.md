@@ -9,6 +9,8 @@ decision: ""          # proceed | pivot | kill
 
 # <DOC_TITLE>
 
+**Personas Applied:** PM, UX
+
 > Post-release measurement and decision record for this release. Read by the next
 > `define-brief` gate-in before a new version cycle can start.
 

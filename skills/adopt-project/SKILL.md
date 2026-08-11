@@ -36,6 +36,7 @@ Audit via section reads and the codegraph query, not whole-tree reads. **If no c
    - **Seed status from the most authoritative source: ledger files and commits, not stale tracker state.** A closed GH issue wins over a stale "in_progress" in a roadmap file.
    - Do not double-count: one epic/story per work item, regardless of how many places it appears.
    - No PRD is required here (per Gate-in) — a story reconciled without one legitimately has no `prd_ref`. Don't invent a requirement id to satisfy the schema; step 8 is what makes that honest.
+   - Write `_meta.personas_applied` (schema-defined, informational only): `["Architect", "Security"]`, plus `"PM"` if a PRD already exists to map work against.
 
 6. **Dedup** — merge duplicate tracking universes (e.g. roadmap slices that overlap tracker sub-issues). Flag any ambiguous cases for the human to resolve; never guess.
 

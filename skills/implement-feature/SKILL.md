@@ -29,7 +29,7 @@ Read the sub-issue spec + the epic's ledger, same as `implement-epic`'s own cont
 Resolve `<slug>` per `workflow.md`'s **Resolving `<slug>`** rule — reuse the existing `epic/<epic-id>-*` branch if `define-epic`/`define-feature` already created one; never re-derive from scratch when this runs as a fresh session rather than immediately after them. Then run `node scripts/ensure-branch.mjs --skill=implement-feature --name=epic/<epic-id>-<slug>`. If it already carries commits, scan `git log --oneline` for this story's id before proposing a breakdown, to detect resumed work.
 
 ### Step 2 — Task breakdown, then TDD
-Same task-breakdown format and approval gate as standalone mode (below), scoped to this one story's spec. **Required sub-skill:** `superpowers:test-driven-development`. Per task: failing test from the story's `acceptance` → confirm it fails right → minimum code → refactor → targeted tests only → commit (`feat: <description> (<story-id>)`) → append a row to `.throughline/epic-<N>/ledger.md`, exactly as `implement-epic` would.
+Same task-breakdown format and approval gate as standalone mode (below), scoped to this one story's spec. **Required sub-skill:** `superpowers:test-driven-development`. Per task: failing test from the story's `acceptance` → confirm it fails right → minimum code → refactor → targeted tests only → commit (`feat: <description> (<story-id>)`) → append a row to `.throughline/epic-<N>/ledger.md`, exactly as `implement-epic` would — including the `personas` column: `Developer`, backfilled to `Developer, Security` if Step 5's security lens fires on this story.
 
 ### Step 3 — Contract write-back
 After tests pass, write into `backlog.json`:
@@ -81,7 +81,7 @@ Confirm to proceed, or correct anything above.
 Order: schema/persistence -> domain logic -> API/server layer -> UI -> observability. Wait for explicit approval before touching any code.
 
 ### Step 3 — Execute via TDD
-**Required sub-skill:** `superpowers:test-driven-development`. Per task: failing test from the AC → confirm it fails right → minimum code → refactor → targeted tests only → commit (`feat: <description> (<feature-slug>)`) → ledger row in `.throughline/feature-<slug>/ledger.md`.
+**Required sub-skill:** `superpowers:test-driven-development`. Per task: failing test from the AC → confirm it fails right → minimum code → refactor → targeted tests only → commit (`feat: <description> (<feature-slug>)`) → ledger row in `.throughline/feature-<slug>/ledger.md`, with a `personas` column: `Developer`, backfilled to `Developer, Security` if the security lens below fires.
 
 **Stop immediately** when: a test won't go green and the fix isn't clear from the spec; an expected file/symbol doesn't exist or has unexpected structure; the spec contradicts the codebase; an instruction is genuinely ambiguous. State what was expected, what was found, what decision is needed — never guess.
 

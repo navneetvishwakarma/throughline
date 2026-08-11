@@ -7,6 +7,8 @@ updated: <DATE>
 
 # <PROJECT_NAME> — Design
 
+**Personas Applied:** UX Designer, PM, Developer
+
 > Index for the design tier. Approve this doc (set `status: approved`) at G3, once journeys, tokens, wireframes, and mockups for the current release are ready.
 
 ## Contents
