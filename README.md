@@ -8,7 +8,7 @@ The core is platform-neutral: skills, templates, Node scripts, a backlog contrac
 
 Throughline is public but early.
 
-- Version: `0.2.0`
+- Version: `0.3.1`
 - Install mode: source checkout
 - Published package: not yet
 - Field status: core workflow and bootstrap are implemented; the epic, ship, release, and brownfield flows are written and still need wider field use
@@ -330,6 +330,7 @@ throughline/
   scripts/
     doctor.mjs                           repository health check
     install.mjs                          shared platform installer
+    test-coverage.mjs                    real coverage across spawned child-process scripts
   skills/bootstrap-project/assets/scripts/coverage.mjs    stack-detecting coverage gate (scaffolded)
   skills/bootstrap-project/assets/scripts/check-docs.mjs  doc-tier structural checks (scaffolded)
   skills/bootstrap-project/assets/scripts/sync-plugin.mjs upgrade a project's scaffold (scaffolded)
@@ -353,6 +354,7 @@ throughline/
 | `define-epic` | G6 | expand one epic into story specs and a test plan |
 | `implement-epic` | none | build stories and record verification evidence |
 | `ship-epic` | G7 | merge locally or via PR and refresh status |
+| `ship-feature` | G7 | ship non-epic work (hotfix, plugin/scaffold maintenance, doc-only change) — same checks as `ship-epic`, scoped by feature slug instead of epic id |
 | `release` | G8 | cut a release, changelog, dashboard, and announcement |
 | `measure-learn` | G9 | review metrics/ops/UX signals and decide proceed, pivot, or kill |
 
