@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "test:coverage": "node scripts/test-coverage.mjs",
     "doctor": "node scripts/doctor.mjs"
   },
   "author": {
@@ -15,9 +16,22 @@
     "type": "git",
     "url": "git+https://github.com/navneetvishwakarma/throughline.git"
   },
-  "keywords": ["claude-code", "codex", "antigravity", "solo-dev", "ai-assisted", "workflow", "spec-driven", "backlog", "plugin"],
+  "keywords": [
+    "claude-code",
+    "codex",
+    "antigravity",
+    "solo-dev",
+    "ai-assisted",
+    "workflow",
+    "spec-driven",
+    "backlog",
+    "plugin"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "c8": "^12.0.0"
   }
 }

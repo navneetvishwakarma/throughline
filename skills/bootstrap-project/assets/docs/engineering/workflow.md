@@ -162,5 +162,5 @@ node scripts/validate.mjs         # gate: fails loud on a bad contract
 node scripts/gate.mjs list        # show human gate state — the authoritative source
 node scripts/sync-status.mjs      # sync local/GitHub status into the contract
 node scripts/coverage.mjs --check # verify coverage against threshold
-node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html
+node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (work board + Planning section)
 ```

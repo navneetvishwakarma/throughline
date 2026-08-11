@@ -144,7 +144,7 @@ Empty stubs — front-matter block + required section headings — for every doc
 
 **`sync-status.mjs`** ⚙️ — Reads `.throughline/ship-*/issue-*.json` (or the GH API) and stamps `status` / `blocked_by` into `backlog.json`. The only writer of those fields. No LLM in this path.
 
-**`build-dashboard.mjs`** ⚙️ — Pure function: `backlog.json` + computed summary → `PROGRESS_DASHBOARD.html`. Zero dependencies.
+**`build-dashboard.mjs`** ⚙️ — Pure function: `backlog.json` + computed summary → `PROGRESS_DASHBOARD.html`. Zero dependencies. Renders both the current-release work board (progress) and a Planning section (gate pipeline strip from `.throughline/gates.json`, plus a phase-grouped roadmap across all releases).
 
 **`dashboard.template.html`** 📐 — The view; data is injected at build time.
 
