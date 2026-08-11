@@ -1097,6 +1097,29 @@ test('ship-feature exists alongside ship-epic and scopes G7 by feature slug inst
   assert.match(text, /ensure-branch\.mjs --check-only/);
 });
 
+test('define-feature and implement-feature exist alongside define-epic/implement-epic as the non-backlog-tracked pair', () => {
+  const definePath = join(repoRoot, 'skills/define-feature/SKILL.md');
+  const implementPath = join(repoRoot, 'skills/implement-feature/SKILL.md');
+  assert.equal(existsSync(definePath), true);
+  assert.equal(existsSync(implementPath), true);
+
+  const define = readFileSync(definePath, 'utf8');
+  assert.match(define, /name: define-feature/);
+  // Shares one continuous branch with implement-feature, the same way define-epic/implement-epic do.
+  assert.match(define, /ensure-branch\.mjs --skill=define-feature --name=feature\/<slug>/);
+  // Local mode never files a GitHub issue; source of truth stays spec.md either way.
+  assert.match(define, /tracker: local.*done/);
+  assert.match(define, /tracker: github/);
+  assert.match(define, /never a replacement for it|mirrors are never sources of truth|mirrors, never sources of truth/);
+
+  const implement = readFileSync(implementPath, 'utf8');
+  assert.match(implement, /name: implement-feature/);
+  assert.match(implement, /ensure-branch\.mjs --skill=implement-feature --name=feature\/<slug>/);
+  // Must never merge/push itself -- that stays ship-feature's job, same split implement-epic keeps from ship-epic.
+  assert.match(implement, /never merges or pushes/);
+  assert.doesNotMatch(implement, /gh pr merge|git merge --no-ff/);
+});
+
 test('validate.mjs fails loud when epic working state is written under .claude/ instead of .throughline/', () => {
   const root = makeProject('misplaced-state');
   try {
@@ -1112,6 +1135,26 @@ test('validate.mjs fails loud when epic working state is written under .claude/ 
     const after = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.notEqual(after.status, 0);
     assert.match(after.stdout + after.stderr, /\.claude\/epic-1.*must live under \.throughline\//);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs fails loud when feature working state is written under .claude/ instead of .throughline/', () => {
+  const root = makeProject('misplaced-feature-state');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const before = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(before.status, 0, before.stderr || before.stdout);
+
+    mkdirSync(join(root, '.claude/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.claude/feature-readme-fix/spec.md'), '# spec\n', 'utf8');
+
+    const after = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(after.status, 0);
+    assert.match(after.stdout + after.stderr, /\.claude\/feature-readme-fix.*must live under \.throughline\//);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
