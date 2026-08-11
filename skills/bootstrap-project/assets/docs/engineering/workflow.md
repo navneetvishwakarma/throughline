@@ -38,17 +38,40 @@ creates and switches to `feature/<skill>-<timestamp>` automatically and reports 
 name. `define-epic` and `implement-epic` share one continuous `epic/<epic-id>-<slug>`
 branch instead (`ensure-branch.mjs --name=epic/<epic-id>-<slug>`), so the epic's specs,
 implementation, and ship all land on the same history. `define-feature` and
-`implement-feature` share `feature/<slug>` the same way, so a feature's spec (when one
-was written — trivial changes can skip straight to `implement-feature` or
-`ship-feature`) and its implementation land on the same history too. `release` is the
-one deliberate exception — it runs after a release's epics are already merged and
-operates on `main` itself.
+`implement-feature` run in one of two modes and branch accordingly: **epic-linked**
+(spec'ing/building a single story that's a building block of an already-planned epic —
+a lighter, one-story-at-a-time alternative to expanding `define-epic`/looping
+`implement-epic` all at once) shares that same `epic/<epic-id>-<slug>` branch, because
+the story's work still ships only as part of the whole epic, atomically, via
+`ship-epic`; **standalone** (non-epic work with a logical boundary — a hotfix,
+plugin/scaffold maintenance, a doc-only change) shares `feature/<slug>` instead, and
+ships via `ship-feature`. Trivial standalone changes can skip the spec step entirely and
+go straight to `implement-feature` or `ship-feature`. `release` is the one deliberate
+exception — it runs after a release's epics are already merged and operates on `main`
+itself.
 
-Pushing to remote only ever happens through **`ship-epic`** (backlog-tracked epic work)
-or **`ship-feature`** (everything else — hotfixes, plugin/scaffold maintenance, doc-only
-changes, and features spec'd by `define-feature`/built by `implement-feature`), both
-gated the same way (build/test, a security lens where relevant, explicit human approval)
-and both scoping G7 by subject (`--subject <epic-id>` or `--subject <feature-slug>`) so
+**Resolving `<slug>` for a shared `epic/<epic-id>-<slug>` branch.** `ensure-branch.mjs
+--name=<X>` takes a literal, already-resolved branch name — it never derives the slug
+itself, so whichever skill runs first must resolve it the same deterministic way every
+other skill touching that epic will: check for an existing local branch matching
+`epic/<epic-id>-*` (`git branch --list "epic/<epic-id>-*"`, then `git branch -r --list
+"origin/epic/<epic-id>-*"` if none local) and reuse that exact name if found; only if
+none exists yet, derive it from the epic's `title` in `backlog.json` using the same
+kebab-case rule `build-dashboard.mjs`'s own `slug()` helper uses (lowercase,
+non-alphanumeric runs collapsed to `-`, trimmed). This matters most for
+`define-feature`/`implement-feature` in epic-linked mode, which can be invoked standalone
+in a fresh session rather than immediately after `define-epic` — resolving from an
+existing branch first, not re-deriving from scratch, is what prevents a second
+`epic/<epic-id>-<other-slug>` branch from silently forking the epic's history.
+
+Pushing to remote only ever happens through **`ship-epic`** (backlog-tracked epic work,
+including any single story spec'd/built via `define-feature`/`implement-feature` in
+epic-linked mode — a story never ships out of the shared epic branch on its own) or
+**`ship-feature`** (standalone non-epic work: hotfixes, plugin/scaffold maintenance,
+doc-only changes, and features spec'd/built by `define-feature`/`implement-feature` in
+standalone mode), both gated the same way (build/test, a security lens where relevant,
+explicit human approval) and both scoping G7 by subject (`--subject <epic-id>` or
+`--subject <feature-slug>`) so
 a stale approval from one ship never satisfies another's.
 
 The bundled pre-commit hook backstops all of this with

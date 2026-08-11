@@ -1097,7 +1097,7 @@ test('ship-feature exists alongside ship-epic and scopes G7 by feature slug inst
   assert.match(text, /ensure-branch\.mjs --check-only/);
 });
 
-test('define-feature and implement-feature exist alongside define-epic/implement-epic as the non-backlog-tracked pair', () => {
+test('define-feature and implement-feature exist, standalone mode staying non-backlog-tracked like ship-feature', () => {
   const definePath = join(repoRoot, 'skills/define-feature/SKILL.md');
   const implementPath = join(repoRoot, 'skills/implement-feature/SKILL.md');
   assert.equal(existsSync(definePath), true);
@@ -1115,9 +1115,27 @@ test('define-feature and implement-feature exist alongside define-epic/implement
   const implement = readFileSync(implementPath, 'utf8');
   assert.match(implement, /name: implement-feature/);
   assert.match(implement, /ensure-branch\.mjs --skill=implement-feature --name=feature\/<slug>/);
-  // Must never merge/push itself -- that stays ship-feature's job, same split implement-epic keeps from ship-epic.
+  // Standalone mode must never merge/push itself -- that stays ship-feature's job, same split implement-epic keeps from ship-epic.
   assert.match(implement, /never merges or pushes/);
   assert.doesNotMatch(implement, /gh pr merge|git merge --no-ff/);
+});
+
+test('define-feature and implement-feature epic-linked mode shares the epic branch and never ships via ship-feature', () => {
+  const define = readFileSync(join(repoRoot, 'skills/define-feature/SKILL.md'), 'utf8');
+  const implement = readFileSync(join(repoRoot, 'skills/implement-feature/SKILL.md'), 'utf8');
+
+  // Epic-linked mode reuses define-epic/implement-epic's own shared branch, not a fresh feature/<slug> one --
+  // orphaning a story's spec off that branch would strand it from implement-epic's continuation.
+  assert.match(define, /ensure-branch\.mjs --skill=define-feature --name=epic\/<epic-id>-<slug>/);
+  assert.match(implement, /ensure-branch\.mjs --skill=implement-feature --name=epic\/<epic-id>-<slug>/);
+
+  // A single story can never ship out of the shared epic branch on its own -- ship-epic's own gate-in
+  // requires every story done, so epic-linked implement-feature must hand off to ship-epic, not ship-feature.
+  assert.match(implement, /never hands off to `ship-feature`/);
+  assert.match(implement, /ship-epic.*gate-in requires every story/);
+
+  const shipFeature = readFileSync(join(repoRoot, 'skills/ship-feature/SKILL.md'), 'utf8');
+  assert.match(shipFeature, /epic-linked mode/);
 });
 
 test('validate.mjs fails loud when epic working state is written under .claude/ instead of .throughline/', () => {
