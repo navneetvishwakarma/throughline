@@ -354,7 +354,9 @@ throughline/
 | `define-epic` | G6 | expand one epic into story specs and a test plan |
 | `implement-epic` | none | build stories and record verification evidence |
 | `ship-epic` | G7 | merge locally or via PR and refresh status |
-| `ship-feature` | G7 | ship non-epic work (hotfix, plugin/scaffold maintenance, doc-only change) — same checks as `ship-epic`, scoped by feature slug instead of epic id |
+| `define-feature` | none | spec non-epic work before code, when it's substantial enough to need one — grill, personas, self-review, file to GitHub only if `tracker: github` |
+| `implement-feature` | none | build a `define-feature` spec (or a spec-less trivial change) via TDD, quality gate, self-review — hands off to `ship-feature` |
+| `ship-feature` | G7 | ship non-epic work (hotfix, plugin/scaffold maintenance, doc-only change, or a `define-feature`/`implement-feature` result) — same checks as `ship-epic`, scoped by feature slug instead of epic id |
 | `release` | G8 | cut a release, changelog, dashboard, and announcement |
 | `measure-learn` | G9 | review metrics/ops/UX signals and decide proceed, pivot, or kill |
 

@@ -36,7 +36,7 @@ for (const wrongRoot of WRONG_STATE_ROOTS) {
   let entries = [];
   try { entries = readdirSync(base); } catch { continue; }
   for (const entry of entries) {
-    if (/^(epic|ship)-/.test(entry) || entry === 'gates.json' || entry === 'plugin-version.json') {
+    if (/^(epic|ship|feature)-/.test(entry) || entry === 'gates.json' || entry === 'plugin-version.json') {
       err(wrongRoot + '/' + entry + ': throughline working state must live under .throughline/, not ' + wrongRoot + '/ — run `node scripts/sync-plugin.mjs --repair-state --apply` to move it, or move it by hand.');
     }
   }

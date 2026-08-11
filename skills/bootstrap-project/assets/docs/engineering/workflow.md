@@ -37,15 +37,19 @@ anything else — off `main` already, it's a no-op; on `main` (or no commits yet
 creates and switches to `feature/<skill>-<timestamp>` automatically and reports the
 name. `define-epic` and `implement-epic` share one continuous `epic/<epic-id>-<slug>`
 branch instead (`ensure-branch.mjs --name=epic/<epic-id>-<slug>`), so the epic's specs,
-implementation, and ship all land on the same history. `release` is the one deliberate
-exception — it runs after a release's epics are already merged and operates on `main`
-itself.
+implementation, and ship all land on the same history. `define-feature` and
+`implement-feature` share `feature/<slug>` the same way, so a feature's spec (when one
+was written — trivial changes can skip straight to `implement-feature` or
+`ship-feature`) and its implementation land on the same history too. `release` is the
+one deliberate exception — it runs after a release's epics are already merged and
+operates on `main` itself.
 
 Pushing to remote only ever happens through **`ship-epic`** (backlog-tracked epic work)
 or **`ship-feature`** (everything else — hotfixes, plugin/scaffold maintenance, doc-only
-changes), both gated the same way (build/test, a security lens where relevant, explicit
-human approval) and both scoping G7 by subject (`--subject <epic-id>` or
-`--subject <feature-slug>`) so a stale approval from one ship never satisfies another's.
+changes, and features spec'd by `define-feature`/built by `implement-feature`), both
+gated the same way (build/test, a security lens where relevant, explicit human approval)
+and both scoping G7 by subject (`--subject <epic-id>` or `--subject <feature-slug>`) so
+a stale approval from one ship never satisfies another's.
 
 The bundled pre-commit hook backstops all of this with
 `node scripts/ensure-branch.mjs --check-only`, which hard-blocks any commit made
