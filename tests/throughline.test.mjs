@@ -679,6 +679,103 @@ test('validate.mjs enforces coverage.min only when coverage.mode is enforce, and
   }
 });
 
+test('validate.mjs rejects an invalid coverage.mode and a non-numeric or out-of-range coverage.min', () => {
+  const root = makeProject('coverage-contract-mode-min');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforcee', min: 0.7 } }));
+    const badMode = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badMode.status, 0);
+    assert.match(badMode.stderr, /coverage\.mode must be one of off\|warn\|enforce/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 'high' } }));
+    const nonNumericMin = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(nonNumericMin.status, 0);
+    assert.match(nonNumericMin.stderr, /coverage\.min must be a finite number from 0 through 1/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 1.5 } }));
+    const tooHigh = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(tooHigh.status, 0);
+    assert.match(tooHigh.stderr, /coverage\.min must be a finite number from 0 through 1/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: -0.1 } }));
+    const negative = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(negative.status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects a non-object coverage value, an empty coverage.command, and non-string coverage.stacks entries', () => {
+  const root = makeProject('coverage-contract-shape');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: 'enforce' }));
+    const notObject = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(notObject.status, 0);
+    assert.match(notObject.stderr, /coverage must be an object/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { command: '   ' } }));
+    const blankCommand = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(blankCommand.status, 0);
+    assert.match(blankCommand.stderr, /coverage\.command must be a non-empty string/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { stacks: ['node-vitest', ''] } }));
+    const blankStack = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(blankStack.status, 0);
+    assert.match(blankStack.stderr, /coverage\.stacks must be an array of non-empty strings/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects malformed coverage.targets entries: missing fields and duplicate ids', () => {
+  const root = makeProject('coverage-contract-targets');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { mode: 'warn', targets: [{ id: 'backend', cwd: 'apps/backend' }] },
+    }));
+    const missingFields = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(missingFields.status, 0);
+    assert.match(missingFields.stderr, /coverage\.targets\[0\]\.command is required/);
+    assert.match(missingFields.stderr, /coverage\.targets\[0\]\.summary is required/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'pnpm test', summary: 'coverage/coverage-summary.json' },
+          { id: 'backend', cwd: 'apps/mobile', command: 'pnpm test', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+    }));
+    const dup = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(dup.status, 0);
+    assert.match(dup.stderr, /coverage\.targets\[1\]\.id "backend" is duplicated/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs still rejects an invalid coverage.mode even when legacyContractGrace is active', () => {
+  const root = makeProject('coverage-contract-grace-override');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'nope' } }));
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0, 'legacyContractGrace only softens prd_ref/acceptance/done-verify gaps, never coverage-contract shape');
+    assert.match(result.stderr, /coverage\.mode must be one of/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('build-dashboard.mjs renders without throwing when no coverage data exists', () => {
   const root = makeProject('coverage-dashboard');
   try {

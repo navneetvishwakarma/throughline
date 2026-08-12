@@ -36,8 +36,23 @@
       "properties": {
         "min": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.7, "description": "Minimum aggregate line coverage required when mode is 'enforce'." },
         "mode": { "enum": ["off", "warn", "enforce"], "default": "warn", "description": "off = ignored; warn = measured and reported, never blocks; enforce = blocks done stories/ship-epic/CI below min." },
-        "command": { "type": "string", "description": "Override: exact command to run instead of stack auto-detection." },
-        "stacks": { "type": "array", "items": { "type": "string" }, "description": "Override: restrict detection to these stack ids (e.g. for a monorepo)." }
+        "command": { "type": "string", "minLength": 1, "description": "Override: exact command to run instead of stack auto-detection." },
+        "stacks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Override: restrict detection to these stack ids (e.g. for a monorepo)." },
+        "targets": {
+          "type": "array",
+          "description": "Explicit per-workspace coverage targets for a monorepo. Takes priority over stack auto-detection when present; every target runs and results are aggregated by total covered / total measurable lines.",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "cwd", "command", "summary"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "description": "Unique identifier; selectable via --stack." },
+              "cwd": { "type": "string", "minLength": 1, "description": "Workspace directory, relative to the repo root." },
+              "command": { "type": "string", "minLength": 1, "description": "Coverage command to run inside cwd." },
+              "summary": { "type": "string", "minLength": 1, "description": "istanbul-style json-summary report path, relative to cwd." },
+              "lcov": { "type": "string", "minLength": 1, "description": "Optional lcov report path, relative to cwd, linked from the dashboard." }
+            }
+          }
+        }
       }
     },
     "phases": {

@@ -54,6 +54,41 @@ if (!data.project) err('project is required');
 if (!data.prd) err('prd path is required');
 if (data.tracker && !TRACKERS.includes(data.tracker)) err("tracker must be one of " + TRACKERS.join('|') + " (got " + JSON.stringify(data.tracker) + ")");
 if (data.release_in_flight && (data.epics || []).length && !(data.epics || []).some((e) => e.release === data.release_in_flight)) err('release_in_flight ' + JSON.stringify(data.release_in_flight) + ' does not match any epics[].release');
+
+const COVERAGE_MODES = ['off', 'warn', 'enforce'];
+function validateCoverage(coverage) {
+  if (coverage === undefined) return;
+  if (typeof coverage !== 'object' || coverage === null || Array.isArray(coverage)) { err('coverage must be an object'); return; }
+  if (coverage.mode !== undefined && !COVERAGE_MODES.includes(coverage.mode)) err('coverage.mode must be one of ' + COVERAGE_MODES.join('|') + ' (got ' + JSON.stringify(coverage.mode) + ')');
+  if (coverage.min !== undefined) {
+    const min = coverage.min;
+    if (typeof min !== 'number' || !Number.isFinite(min) || min < 0 || min > 1) err('coverage.min must be a finite number from 0 through 1 (got ' + JSON.stringify(min) + ')');
+  }
+  if (coverage.command !== undefined && (typeof coverage.command !== 'string' || !coverage.command.trim())) err('coverage.command must be a non-empty string');
+  if (coverage.stacks !== undefined) {
+    if (!Array.isArray(coverage.stacks) || coverage.stacks.some((s) => typeof s !== 'string' || !s.trim())) err('coverage.stacks must be an array of non-empty strings');
+  }
+  if (coverage.targets !== undefined) {
+    if (!Array.isArray(coverage.targets)) { err('coverage.targets must be an array'); return; }
+    const targetIds = new Set();
+    coverage.targets.forEach((t, i) => {
+      const at = 'coverage.targets[' + i + ']';
+      if (!t || typeof t !== 'object' || Array.isArray(t)) { err(at + ' must be an object'); return; }
+      if (!t.id || typeof t.id !== 'string' || !t.id.trim()) err(at + '.id is required and must be a non-empty string');
+      else if (targetIds.has(t.id)) err(at + '.id "' + t.id + '" is duplicated');
+      else targetIds.add(t.id);
+      if (!t.cwd || typeof t.cwd !== 'string' || !t.cwd.trim()) err(at + '.cwd is required and must be a non-empty string');
+      if (!t.command || typeof t.command !== 'string' || !t.command.trim()) err(at + '.command is required and must be a non-empty string');
+      if (!t.summary || typeof t.summary !== 'string' || !t.summary.trim()) err(at + '.summary is required and must be a non-empty string');
+      if (t.lcov !== undefined && (typeof t.lcov !== 'string' || !t.lcov.trim())) err(at + '.lcov must be a non-empty string');
+    });
+  }
+}
+// Runs unconditionally -- unlike prd_ref/acceptance/done-verify gaps, the coverage contract's
+// *shape* is never softened by legacyContractGrace: a malformed mode/min/target is a config
+// bug, not a pre-existing-data gap that a grace period is meant to cover.
+validateCoverage(data.coverage);
+
 if (!Array.isArray(data.epics)) err('epics must be an array');
 if (!Array.isArray(data.stories)) err('stories must be an array');
 if ((data.stories || []).length) {
