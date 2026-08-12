@@ -78,8 +78,12 @@
       "prd_ref": "REQ-04",
       "acceptance": "The rendered .github/workflows/throughline.yml includes permissions: contents: read and contains no || true; a customized or pre-0.3.2 copy is never overwritten and never enters pendingReview but is reported as differing from the current render; a repo with no package.json at all defers seeding instead of baking in a workflow with no install step.",
       "blocked_by": [],
-      "status": "notstarted",
-      "order": 3
+      "status": "in_progress",
+      "order": 3,
+      "verify": {
+        "ci": "pass",
+        "commit": "7c2a44b"
+      }
     },
     {
       "id": "S-5",
