@@ -65,6 +65,13 @@ function switchTo(name, create) {
 }
 
 if (explicitName) {
+  // Checked before comparing against `current` so this rejects regardless of starting state --
+  // a feature branch, already on main, or detached HEAD (current === '') all hit this the same
+  // way, instead of only the "current !== explicitName" branch-switch path.
+  if (PROTECTED.includes(explicitName)) {
+    console.error('Refusing: --name=' + explicitName + ' names a protected branch. throughline never switches directly onto ' + PROTECTED.join('/') + '.');
+    process.exit(1);
+  }
   if (current === explicitName) { console.log('On ' + explicitName + ' already -- OK.'); process.exit(0); }
   switchTo(explicitName, !branchExists(explicitName));
   process.exit(0);

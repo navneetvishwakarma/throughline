@@ -27,6 +27,16 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFi
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 
+// adopt-project's own bootstrapping trick hand-copies this ONE file before anything else
+// exists (see its SKILL.md step 1) -- lib/render-workflow.mjs isn't there yet on that very
+// first run. Degrade gracefully rather than crashing: skip seed-only handling for this run;
+// the next --apply (once this run has copied lib/render-workflow.mjs in via FILES) picks it
+// up normally.
+let detectLockfile = null, renderWorkflow = null;
+try {
+  ({ detectLockfile, renderWorkflow } = await import('./lib/render-workflow.mjs'));
+} catch {}
+
 const root = process.cwd();
 const args = process.argv.slice(2);
 const forceArg = args.find((a) => a === '--force' || a.startsWith('--force='));
@@ -152,11 +162,11 @@ const FILES = [
   'scripts/ensure-branch.mjs',
   'scripts/init-project.mjs',
   'scripts/sync-plugin.mjs',
+  'scripts/lib/render-workflow.mjs',
   'docs/engineering/workflow.md',
   'docs/engineering/backlog.schema.json',
   'docs/engineering/backlog.seed.json',
   '.githooks/pre-commit',
-  '.github/workflows/throughline.yml',
   ...listTemplates(),
 ];
 
@@ -183,6 +193,36 @@ for (const rel of FILES) {
   const src = join(assets, rel);
   if (!existsSync(src)) continue;
   syncFile(rel, readFileSync(src, 'utf8'));
+}
+
+// Seed-only files: repository-specific (a generated CI workflow needs the project's own
+// package manager and toolchain choices). Rendered fresh on every run rather than byte-copied,
+// but only ever WRITTEN when missing -- once present, this loop only reads it back to report
+// whether it still matches the current render, never to overwrite or flag it. That's what makes
+// "keep the bundled CI workflow unless the repo has a stronger equivalent" (bootstrap-project's
+// own advice) actually safe to follow without hand-tracking which files are exempt from sync.
+// If there's no package.json at all yet, don't seed a workflow with no install step baked in
+// forever -- defer until a lockfile exists, so a later --apply is what actually creates it.
+const SEED_ONLY_FILES = renderWorkflow
+  ? [{ rel: '.github/workflows/throughline.yml', render: renderWorkflow, canRender: (r) => detectLockfile(r) !== 'no-node' }]
+  : [];
+const seedOnly = { seeded: [], upToDate: [], differs: [], deferred: [] };
+for (const item of SEED_ONLY_FILES) {
+  const dest = join(root, item.rel);
+  const existing = readSafe(dest);
+  if (existing != null) {
+    if (item.canRender(root) && existing === item.render(root)) seedOnly.upToDate.push(item.rel);
+    else seedOnly.differs.push(item.rel);
+    continue;
+  }
+  if (!item.canRender(root)) { seedOnly.deferred.push(item.rel); continue; }
+  if (apply) { mkdirSync(dirname(dest), { recursive: true }); writeFileSync(dest, item.render(root), 'utf8'); }
+  seedOnly.seeded.push(item.rel);
+}
+// --force must never silently no-op on a seed-only file -- say so, instead of leaving a human
+// staring at an unchanged file wondering whether their --force did anything.
+for (const item of SEED_ONLY_FILES) {
+  if (shouldForce(item.rel)) console.log('ignored: ' + item.rel + ' is seed-only and is never overwritten by --force.');
 }
 
 // AGENTS.md is rendered (project name substituted), not a raw copy — regenerate it from
@@ -260,5 +300,10 @@ if (results.flagged.length) {
   console.log('needs review (differs from your copy, NOT overwritten):');
   results.flagged.forEach((f) => console.log('  - ' + f.rel + '  (' + f.oldLines + ' lines here vs ' + f.newLines + ' in the plugin — diff manually, then rerun with --force=' + f.rel + ' to accept the plugin\'s version of just this file)'));
 }
+if (seedOnly.upToDate.length) console.log('seed-only, up to date: ' + seedOnly.upToDate.join(', '));
+if (seedOnly.differs.length) console.log('seed-only, differs from current render (never auto-updated — review by hand if you want the latest): ' + seedOnly.differs.join(', '));
+if (seedOnly.seeded.length) console.log((apply ? 'seeded: ' : 'would seed: ') + seedOnly.seeded.join(', ') + ' (rendered from the detected lockfile)');
+if (seedOnly.deferred.length) console.log('deferred (no package manager detected yet, seed-only): ' + seedOnly.deferred.join(', ') + ' — rerun `node scripts/sync-plugin.mjs --apply` once a lockfile is committed.');
+
 if (!apply) console.log('\nreport only: no files were written. Rerun with --apply to add missing files, or --force=<path,...> once you\'ve reviewed a flagged file.');
 else if (results.flagged.length) console.log('\napplied. ' + results.flagged.length + ' file(s) above are still unresolved — the version stamp will not claim this project is fully current until they are.');
