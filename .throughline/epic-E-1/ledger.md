@@ -7,3 +7,13 @@
 | S-5 | release_in_flight required + no invented v1 | scripts/validate.mjs, scripts/build-dashboard.mjs | node --test tests/throughline.test.mjs (92/92) → pass | b0f7a5d | done | initial single-branch design broke the pre-existing mismatch-check test; fixed by splitting effective-release (mismatch check) from explicit-only (required-field check) before commit |
 | S-6 | protect --name=main/master | scripts/ensure-branch.mjs | node --test tests/throughline.test.mjs (93/93) → pass | 07c96bb | done | none |
 | S-7 | version bump to 0.3.2 | package.json, .claude-plugin/*, .codex-plugin/*, adapters/*, README.md | npm test (93/93), npm run doctor, npm run test:coverage → all pass | b38eb3c | done | also bumped adapters/claude and adapters/codex mirror manifests, beyond the 5 files literally named in REQ-07, to avoid leaving a stale version elsewhere in the repo |
+
+## Epic quality gate (implement-epic Step 4)
+
+- `npm test`: 93/93 pass, zero regressions. Output: `.throughline/epic-E-1/test-out.txt`.
+- `npm run doctor`: OK.
+- `npm run test:coverage`: completes; ensure-branch.mjs (the one story that's a pure logic-branch fix, S-6) hits 100% statement coverage; sync-plugin.mjs/coverage.mjs land in the high 70s-80s (pre-existing gaps in untouched auto-detect branches for Python/Go/Java/Rust stacks, not new gaps from this epic).
+- `node scripts/coverage.mjs --json` against **this repo's own dogfooding copy**: `status: "error"` (c8 is not fully wired for this repo's `node --test` runner). `coverage.mode` here is `warn`, so this is explicitly non-blocking per the contract this epic itself built — flagged to the human rather than silently ignored, not fixed here (pre-existing infra gap, out of scope for REQ-01..07). Output: `.throughline/epic-E-1/coverage-out.txt`.
+- Cross-feature review: S-1/S-5 both touch `validate.mjs`, S-2/S-3 both touch `coverage.mjs` -- no interaction regressions (full suite green after every story, including the final combined state). No auth/PII surfaces touched. Path traversal explicitly guarded in S-3. No `design_ref` stories -- design dimension N/A.
+- Dogfooding: this repo's own root-level scaffold copies were synced to the fixed plugin source (`sync-plugin.mjs --apply --from=.`, run twice to clear the self-bootstrapping lag documented in upgrade-project's SKILL.md); `.throughline/plugin-version.json` now stamps this repo current at 0.3.2 with empty `pendingReview`. This repo's own `.github/workflows/throughline.yml` (seeded at bootstrap with the old static content) correctly reports "differs from current render" and was deliberately left untouched, per the seed-only contract this epic just built.
+

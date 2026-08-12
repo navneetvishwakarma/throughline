@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-08-12T17:01:44.919Z",
+  "status": "error",
+  "stacks": [
+    {
+      "stack": "node-test",
+      "tool": "c8",
+      "status": "error",
+      "message": "command failed",
+      "passed": false
+    }
+  ],
+  "commit": "4655d0e115123c9faa8a4bf76eaf07016749a820",
+  "aggregate": {
+    "pct": null
+  },
+  "threshold": 0.7,
+  "mode": "warn",
+  "passed": false
+}
