@@ -1165,6 +1165,101 @@ test('sync-plugin.mjs never overwrites a locally-edited scaffold file without --
   }
 });
 
+test('sync-plugin.mjs seeds .github/workflows/throughline.yml rendered for the detected lockfile, then never overwrites a customized copy but still reports that it differs from the current render', () => {
+  const root = makeProject('sync-ci-seed-only');
+  try {
+    // The real bootstrap-project skill no longer wholesale-copies .github/ -- this file is
+    // seeded exclusively by sync-plugin.mjs --apply. Simulate that starting state.
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeJson(join(root, 'package-lock.json'), { name: 'fixture' });
+
+    const seeded = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+    const rendered = readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8');
+    assert.match(rendered, /npm ci/);
+    assert.match(rendered, /permissions:\n\s*contents: read/);
+    assert.doesNotMatch(rendered, /\|\| true/);
+    assert.match(seeded.stdout, /seeded: \.github\/workflows\/throughline\.yml/);
+
+    const unchangedResync = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(unchangedResync.status, 0, unchangedResync.stderr || unchangedResync.stdout);
+    assert.doesNotMatch(unchangedResync.stdout, /needs review/);
+    assert.match(unchangedResync.stdout, /seed-only, up to date: \.github\/workflows\/throughline\.yml/);
+
+    writeFileSync(join(root, '.github/workflows/throughline.yml'), rendered + '\n# project-specific: also run e2e\n', 'utf8');
+    const resynced = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(resynced.status, 0, resynced.stderr || resynced.stdout);
+    assert.doesNotMatch(resynced.stdout, /needs review/);
+    assert.match(resynced.stdout, /differs from current render/);
+    assert.match(readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8'), /project-specific: also run e2e/);
+
+    const version = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+    assert.ok(!version.pendingReview.includes('.github/workflows/throughline.yml'));
+    const pluginPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+    assert.equal(version.version, pluginPkg.version, 'a project-owned CI file must never block the version stamp');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs renders pnpm install steps when pnpm-lock.yaml is present, and defers seeding entirely when there is no package.json at all', () => {
+  const root = makeProject('sync-ci-lockfile-variants');
+  try {
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0\n', 'utf8');
+
+    const pnpmRun = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(pnpmRun.status, 0, pnpmRun.stderr || pnpmRun.stdout);
+    const pnpmYaml = readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8');
+    assert.match(pnpmYaml, /pnpm\/action-setup/);
+    assert.match(pnpmYaml, /pnpm install --frozen-lockfile/);
+
+    rmSync(join(root, 'pnpm-lock.yaml'));
+    rmSync(join(root, '.github/workflows/throughline.yml'));
+    const noLockfileRun = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(noLockfileRun.status, 0, noLockfileRun.stderr || noLockfileRun.stdout);
+    assert.equal(existsSync(join(root, '.github/workflows/throughline.yml')), false);
+    assert.match(noLockfileRun.stdout, /deferred.*\.github\/workflows\/throughline\.yml/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs emits an explicit failing install step when package.json exists but no lockfile is committed', () => {
+  const root = makeProject('sync-ci-package-json-no-lockfile');
+  try {
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeJson(join(root, 'package.json'), { name: 'fixture' });
+
+    const result = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const yaml = readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8');
+    assert.doesNotMatch(yaml, /\|\| true/);
+    assert.match(yaml, /No supported lockfile/);
+    assert.match(yaml, /exit 1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs --force on the seed-only CI workflow is a no-op with an explicit notice, never a silent skip or an overwrite', () => {
+  const root = makeProject('sync-ci-force-noop');
+  try {
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeJson(join(root, 'package-lock.json'), { name: 'fixture' });
+    const seeded = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+
+    writeFileSync(join(root, '.github/workflows/throughline.yml'), '# hand-customized, deliberately not matching the render\n', 'utf8');
+    const forced = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--force=.github/workflows/throughline.yml']);
+    assert.equal(forced.status, 0, forced.stderr || forced.stdout);
+    assert.match(forced.stdout, /ignored: \.github\/workflows\/throughline\.yml is seed-only/);
+    assert.match(readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8'), /hand-customized/, '--force must never touch a seed-only file');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('sync-plugin.mjs --force=<path> resolves only the named file, leaving other flagged files untouched', () => {
   const root = makeProject('sync-scoped-force');
   try {
