@@ -22,7 +22,7 @@ If a git repo exists (it may not — this can run before `bootstrap-project`), r
    - **Riskiest assumption** — the thing most likely to kill it.
 2. Pressure-test: reflect the problem and user back in two sentences. If the user still hedges ("kind of like X but also Y"), keep probing.
 3. For the riskiest assumption, get a decision: **validate now** (spike) or **accept-as-risk**.
-4. Create `docs/product/` if absent (do not depend on the full tree — this runs before bootstrap), and write `docs/product/00-brief.md` with exactly those five sections plus the risk decision. Front-matter `status: draft`.
+4. Create `docs/product/` if absent (do not depend on the full tree — this runs before bootstrap), and write `docs/product/00-brief.md` with exactly those five sections plus the risk decision. Front-matter `status: draft`. Open the doc body with `**Personas Applied:** PM` — the audit line this skill's own persona instruction (line 8 above) is filed under.
 
 ## Gate (G1)
 Ask the user to approve the framing and the risk decision. On approval set `status: approved`.

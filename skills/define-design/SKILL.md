@@ -31,7 +31,7 @@ Load `AGENTS.md` (the canonical cross-agent index) + only the product docs slice
 6. **High-fidelity mockups** — once a screen's checkpoint line is recorded, apply tokens/primitives to its doc; flip front-matter to `fidelity: hi-fi` in place (same file — don't fork a new one). Each still references the `REQ-xx` it satisfies. Run the **visual** a11y pass here: contrast, state indicators beyond color alone (WCAG AA minimum). Fix every flagged issue before presenting.
 7. **Microcopy + empty states** — write labels, CTAs, error messages, and empty states for those screens.
 
-Supporting lenses: PM (scope — only what the first screens need), Developer (flag anything technically infeasible so you can resolve before G3, not after).
+Supporting lenses: PM (scope — only what the first screens need), Developer (flag anything technically infeasible so you can resolve before G3, not after). The template seeds `**Personas Applied:** UX Designer, PM, Developer` under `README.md`'s title — leave it as-is; don't confuse it with a journey's own `persona:` frontmatter field, which names the *user* persona (from `03-user-personas.md`) that journey is for, not the expert lens applied.
 
 ## Outputs
 `docs/design/` — `README.md` (tier index), `tokens.md`, `journeys/*.md`, `screens/*.md` (wireframe → mockup, same file), microcopy notes. Nothing outside the in-scope requirements.

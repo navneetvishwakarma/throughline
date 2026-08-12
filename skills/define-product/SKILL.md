@@ -18,7 +18,7 @@ Run `node scripts/ensure-branch.mjs --skill=define-product` before anything else
 
 ## Do this
 1. Author top-down into the stubs: vision → thesis → personas → market → competitive → success-metrics → GTM strategy (`docs/product/10-gtm-strategy.md`, using `marketing:competitive-brief` if available). (Reconcile: only touch sections the new release actually changes — ground the new pass in `retros/<release_in_flight>.md`'s metrics/feedback, don't re-author from scratch.)
-2. Write `docs/product/06-prd.md`. Give every requirement a stable `REQ-xx` id, a priority (P0/P1/P2), a testable acceptance line, and a `Release` tag (`v1`, `v2`, ...).
+2. Write `docs/product/06-prd.md`. Give every requirement a stable `REQ-xx` id, a priority (P0/P1/P2), a testable acceptance line, and a `Release` tag (`v1`, `v2`, ...). The template seeds `**Personas Applied:** PM, UX, Security` under the title — leave it as-is (all three run unconditionally per this skill's own persona line above); don't strip it on reconcile passes.
 3. Make requirements **vertically sliced** — each maps to one or more future stories, not a horizontal layer.
 4. Flag any requirement touching auth, OAuth scopes, or PII.
 5. Keep it lean — enough to seed the first epics, not a 40-page spec.

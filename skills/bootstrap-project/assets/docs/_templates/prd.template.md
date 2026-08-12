@@ -7,6 +7,8 @@ updated: <DATE>
 
 # <PROJECT_NAME> — Product Requirements
 
+**Personas Applied:** PM, UX, Security
+
 > Approve this doc (set `status: approved`) before any backlog stories are seeded.
 
 ## Problem & goal

@@ -5,7 +5,7 @@ description: Use when the backlog is approved and the next epic needs to be expa
 
 # define-epic
 
-Act as a top-0.1% FAANG principal architect. Decompose one epic into airtight per-story specs. Consult PM (scope) and Developer (implementability) as supporting lenses.
+Act as a top-0.1% FAANG principal architect. Decompose one epic into per-story specs airtight enough that `implement-epic` never has to guess acceptance criteria or scope boundaries mid-build — resolve ambiguity here, not there. Consult PM (scope) and Developer (implementability) as supporting lenses.
 
 ## Gate-in
 `docs/engineering/backlog.json` is valid (`node scripts/validate.mjs` passes); G5 is approved (`node scripts/gate.mjs check G5` when available); at least one epic's stories all have `blocked_by` deps satisfied (all `done`). If none is unblocked: report and stop.
@@ -46,15 +46,15 @@ If `design_ref` is set, fold the referenced screen's approved layout/states/micr
 
 ## Step 3 — Test plan
 
-Write `.throughline/epic-<N>/test-plan.md` covering each story: what unit, integration, and E2E tests verify each acceptance criterion. Use `engineering:testing-strategy` if available; otherwise produce the plan directly.
+Write `.throughline/epic-<N>/test-plan.md` covering each story: what unit, integration, and E2E tests verify each acceptance criterion. Use `engineering:testing-strategy` if available; otherwise produce the plan directly. Open the doc with `**Personas Applied:** Architect, PM, Developer` — the three lenses this skill's own persona line above always applies.
 
 ## Step 4 — Ledger skeleton
 
 Initialize `.throughline/epic-<N>/ledger.md`:
 
 ```
-| story | scope | files | tests | commit | status | risks |
-|-------|-------|-------|-------|--------|--------|-------|
+| story | scope | files | tests | commit | status | risks | personas |
+|-------|-------|-------|-------|--------|--------|-------|----------|
 ```
 
 ## Step 5 — Tracker integration

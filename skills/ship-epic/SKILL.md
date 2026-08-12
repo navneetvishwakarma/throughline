@@ -5,7 +5,7 @@ description: Use when an implemented epic is ready to land — open the PR (or m
 
 # ship-epic
 
-Act as a top-0.1% FAANG senior developer landing clean. Consult a security lens on any PR touching auth, PII, or OAuth scopes — that gate is hard and can block the merge.
+Act as a top-0.1% FAANG senior developer landing clean: never merge on red CI, a failing quality gate, or an unresolved review finding. Consult a security lens on any PR touching auth, PII, or OAuth scopes — that gate is hard and can block the merge.
 
 ## Gate-in
 Epic quality gate passed (all stories' `verify.ci: pass` in `backlog.json`; ledger complete). If not: stop and run `implement-epic` to completion first. If `docs/engineering/backlog.json`'s `coverage.mode` is `enforce`, also run `node scripts/coverage.mjs --check --reuse` — it validates the summary implement-epic already wrote without re-running the full suite. If it fails: stop and send the epic back to `implement-epic`.
@@ -49,7 +49,9 @@ Merged: epic/<epic-id>-<slug> → main
 Stories done: <id list>
 Dashboard: refreshed
 Residual risks: <list or "none">
+Personas: Developer[, Security]
 ```
+Include `Security` only if the diff actually touches auth, PII, or OAuth scopes (this skill's own persona line above is the trigger — Mode A has no separate numbered security step the way Mode B does).
 
 ---
 
@@ -109,14 +111,16 @@ node scripts/sync-status.mjs && node scripts/build-dashboard.mjs
 
 Confirm `sync-status` flipped every shipped story to `done` in `backlog.json`. Confirm `build-dashboard.mjs` exits 0.
 
-**9. Report** — fixed format, ≤6 lines:
+**9. Report** — fixed format, ≤7 lines:
 ```
 Branch: <name> | PR: #<N> — <url> | Merge: <result>
 Issues closed: #<list>
 Dashboard: refreshed
 Residual risks: <list or "none">
 Skipped gates: <list or "none">
+Personas: Developer[, Security]
 ```
+Include `Security` only if step 2's security gate actually fired on this diff.
 
 ---
 

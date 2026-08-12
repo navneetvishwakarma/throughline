@@ -23,6 +23,13 @@
       }
     },
     "prd": { "type": "string", "description": "Path to the PRD that REQ ids resolve against." },
+    "_meta": {
+      "type": "object", "additionalProperties": false,
+      "description": "Informational audit trail, not consumed by validate.mjs or any tooling. Overwritten each time the writing skill runs (current-state field, same spirit as release_in_flight/health — not a history log).",
+      "properties": {
+        "personas_applied": { "type": "array", "items": { "type": "string" }, "description": "Expert lenses consulted by the most recent skill that wrote this file directly (define-backlog or adopt-project), e.g. [\"PM\", \"Architect\"]." }
+      }
+    },
     "coverage": {
       "type": "object", "additionalProperties": false,
       "description": "Optional code-coverage gate. Absence of this key means no enforcement (backward-compatible with installs that predate this feature).",

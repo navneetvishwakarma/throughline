@@ -69,8 +69,9 @@ Do NOT switch or create branches.
 
 Append to `.throughline/epic-<N>/ledger.md`:
 ```
-| <id> | <scope> | <files> | <test cmd> → pass | <SHA> | done | <risks> |
+| <id> | <scope> | <files> | <test cmd> → pass | <SHA> | done | <risks> | <personas> |
 ```
+Leave `<personas>` as `Developer` for now — step 2d's security lens runs after this row is written, so backfill the cell there rather than guessing ahead.
 
 **2d — Write verify into the contract**
 
@@ -84,7 +85,7 @@ Then run `node scripts/coverage.mjs --story <id>` — it measures real coverage 
 
 Do **not** set `status` — `sync-status.mjs` owns that field (tracker mode). In local mode (no tracker), set the story `status: in_progress` on start; leave `done` for ship-epic to set.
 
-**Security lens:** run a code-review + security-review self-pass for any change touching auth, PII, or secrets. Resolve findings before the next story.
+**Security lens:** run a code-review + security-review self-pass for any change touching auth, PII, or secrets. Resolve findings before the next story. If it fired, update this story's ledger row (2c) to `Developer, Security`.
 
 ## Step 3 — Mid-flight amend (critical)
 
