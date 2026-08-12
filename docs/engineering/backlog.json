@@ -106,8 +106,12 @@
       "prd_ref": "REQ-06",
       "acceptance": "Both names exit non-zero and leave the working tree exactly where it was, whether called from a feature branch, from main itself, or from detached HEAD.",
       "blocked_by": [],
-      "status": "notstarted",
-      "order": 5
+      "status": "in_progress",
+      "order": 5,
+      "verify": {
+        "ci": "pass",
+        "commit": "07c96bb"
+      }
     },
     {
       "id": "S-7",
