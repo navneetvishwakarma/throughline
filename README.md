@@ -8,7 +8,7 @@ The core is platform-neutral: skills, templates, Node scripts, a backlog contrac
 
 Throughline is public but early.
 
-- Version: `0.3.1`
+- Version: `0.3.2`
 - Install mode: source checkout
 - Published package: not yet
 - Field status: core workflow and bootstrap are implemented; the epic, ship, release, and brownfield flows are written and still need wider field use

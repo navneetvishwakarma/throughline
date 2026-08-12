@@ -1,6 +1,6 @@
 {
   "name": "throughline",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Solo dev superpowers: a spec-driven, gated workflow that lets one developer ship like a team.",
   "author": {
     "name": "Navneet Vishwakarma"
@@ -8,7 +8,14 @@
   "homepage": "https://github.com/navneetvishwakarma/throughline#readme",
   "repository": "https://github.com/navneetvishwakarma/throughline",
   "license": "MIT",
-  "keywords": ["solo-dev", "ai-assisted", "workflow", "spec-driven", "backlog", "gated"],
+  "keywords": [
+    "solo-dev",
+    "ai-assisted",
+    "workflow",
+    "spec-driven",
+    "backlog",
+    "gated"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Throughline",
@@ -16,7 +23,10 @@
     "longDescription": "Throughline gives one developer a gated idea-to-release workflow backed by a backlog contract, deterministic scripts, and reusable agent skills.",
     "developerName": "Navneet Vishwakarma",
     "category": "Productivity",
-    "capabilities": ["Write", "Interactive"],
+    "capabilities": [
+      "Write",
+      "Interactive"
+    ],
     "defaultPrompt": [
       "Use Throughline to define this product idea.",
       "Bootstrap this repo with Throughline.",
