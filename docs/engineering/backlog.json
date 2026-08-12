@@ -92,8 +92,12 @@
       "prd_ref": "REQ-05",
       "acceptance": "An epic with an explicit release and no matching release_in_flight fails validate.mjs; build-dashboard.mjs selects an actual declared release and shows a visible configuration warning instead of a false 0/0 on-track dashboard.",
       "blocked_by": [],
-      "status": "notstarted",
-      "order": 4
+      "status": "in_progress",
+      "order": 4,
+      "verify": {
+        "ci": "pass",
+        "commit": "b0f7a5d"
+      }
     },
     {
       "id": "S-6",
