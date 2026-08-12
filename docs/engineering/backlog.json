@@ -127,8 +127,12 @@
         "S-5",
         "S-6"
       ],
-      "status": "notstarted",
-      "order": 6
+      "status": "in_progress",
+      "order": 6,
+      "verify": {
+        "ci": "pass",
+        "commit": "b38eb3c"
+      }
     }
   ]
 }
