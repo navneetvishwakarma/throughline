@@ -64,8 +64,12 @@
       "blocked_by": [
         "S-2"
       ],
-      "status": "notstarted",
-      "order": 2
+      "status": "in_progress",
+      "order": 2,
+      "verify": {
+        "ci": "pass",
+        "commit": "45a283a"
+      }
     },
     {
       "id": "S-4",

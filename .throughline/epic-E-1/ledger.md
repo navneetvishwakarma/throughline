@@ -2,7 +2,7 @@
 |-------|-------|-------|-------|--------|--------|-------|
 | S-1 | coverage contract shape validation | scripts/validate.mjs, docs/engineering/backlog.schema.json | node --test tests/throughline.test.mjs (75/75) → pass | ca0bb82 | done | this repo's own coverage.mjs --story run errors (c8 not fully wired for `npm test`'s node:test runner) -- coverage.mode is warn (non-blocking), not part of any story's acceptance, tracked separately not fixed here |
 | S-2 | coverage.mjs runtime fail-safety | scripts/coverage.mjs | node --test tests/throughline.test.mjs (80/80) → pass | b80545e | done | none |
-| S-3 | | | | | | |
+| S-3 | monorepo coverage.targets | scripts/coverage.mjs | node --test tests/throughline.test.mjs (85/85) → pass | 45a283a | done | initial implementation resolved summary/lcov relative to repo root instead of cwd -- caught by the weighted-aggregation test, fixed before commit |
 | S-4 | | | | | | |
 | S-5 | | | | | | |
 | S-6 | | | | | | |
