@@ -1,0 +1,90 @@
+{
+  "schema": 2,
+  "project": "Throughline",
+  "prd": "docs/product/06-prd.md",
+  "release_in_flight": "v1",
+  "coverage": { "min": 0.7, "mode": "warn" },
+  "phases": [],
+  "epics": [
+    {
+      "id": "E-1",
+      "title": "Truthful coverage and scaffold synchronization",
+      "order": 0,
+      "vertical": false,
+      "release": "v1",
+      "prd_ref": ["REQ-01", "REQ-02", "REQ-03", "REQ-04", "REQ-05", "REQ-06", "REQ-07"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "S-1",
+      "title": "validate.mjs enforces the full coverage contract's shape",
+      "epic": "E-1",
+      "prd_ref": "REQ-01",
+      "acceptance": "Invalid coverage.mode, out-of-range coverage.min, blank coverage.command, non-string coverage.stacks entries, and malformed coverage.targets entries (missing fields, duplicate ids) all fail validate.mjs with a specific error, even when legacyContractGrace is active.",
+      "blocked_by": [],
+      "status": "notstarted",
+      "order": 0
+    },
+    {
+      "id": "S-2",
+      "title": "coverage.mjs fails safely on malformed mode/min/threshold/--stack",
+      "epic": "E-1",
+      "prd_ref": "REQ-02",
+      "acceptance": "An unknown coverage.mode, a non-numeric/out-of-range coverage.min, an invalid --threshold, or an unknown --stack all exit 2 with a clear message; only correctly-spelled off/warn bypass threshold enforcement.",
+      "blocked_by": [],
+      "status": "notstarted",
+      "order": 1
+    },
+    {
+      "id": "S-3",
+      "title": "coverage.mjs supports explicit monorepo coverage.targets",
+      "epic": "E-1",
+      "prd_ref": "REQ-03",
+      "acceptance": "Two workspace targets with different report sizes run and aggregate by weighted covered/measurable lines, not an unweighted average; a failing target command or missing declared report fails closed; target paths cannot escape the repository root; --stack can select exactly one target; single-root auto-detection is unchanged when coverage.targets is absent.",
+      "blocked_by": ["S-2"],
+      "status": "notstarted",
+      "order": 2
+    },
+    {
+      "id": "S-4",
+      "title": "CI workflow is seed-only, project-owned, and lockfile-rendered",
+      "epic": "E-1",
+      "prd_ref": "REQ-04",
+      "acceptance": "The rendered .github/workflows/throughline.yml includes permissions: contents: read and contains no || true; a customized or pre-0.3.2 copy is never overwritten and never enters pendingReview but is reported as differing from the current render; a repo with no package.json at all defers seeding instead of baking in a workflow with no install step.",
+      "blocked_by": [],
+      "status": "notstarted",
+      "order": 3
+    },
+    {
+      "id": "S-5",
+      "title": "release_in_flight required once epics declare explicit releases; no invented v1",
+      "epic": "E-1",
+      "prd_ref": "REQ-05",
+      "acceptance": "An epic with an explicit release and no matching release_in_flight fails validate.mjs; build-dashboard.mjs selects an actual declared release and shows a visible configuration warning instead of a false 0/0 on-track dashboard.",
+      "blocked_by": [],
+      "status": "notstarted",
+      "order": 4
+    },
+    {
+      "id": "S-6",
+      "title": "ensure-branch.mjs rejects --name=main and --name=master",
+      "epic": "E-1",
+      "prd_ref": "REQ-06",
+      "acceptance": "Both names exit non-zero and leave the working tree exactly where it was, whether called from a feature branch, from main itself, or from detached HEAD.",
+      "blocked_by": [],
+      "status": "notstarted",
+      "order": 5
+    },
+    {
+      "id": "S-7",
+      "title": "Bump plugin version to 0.3.2 across every manifest",
+      "epic": "E-1",
+      "prd_ref": "REQ-07",
+      "acceptance": "package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json (both version fields), .codex-plugin/plugin.json, and README.md all read 0.3.2; npm run doctor passes.",
+      "blocked_by": ["S-1", "S-2", "S-3", "S-4", "S-5", "S-6"],
+      "status": "notstarted",
+      "order": 6
+    }
+  ]
+}

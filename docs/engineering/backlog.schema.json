@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "backlog.schema.json",
+  "title": "Throughline Backlog Contract (nested: epics group stories)",
+  "description": "Single source of truth for work. Epics are vertically-sliced shippable increments grouping user stories. Stories are the LEAF records that carry status; epic progress is DERIVED, never stored. The backlog IS the tracker; an external tracker is an optional mirror.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project", "prd", "epics", "stories"],
+  "properties": {
+    "schema": { "const": 2, "description": "Schema version. v2 = nested epics+stories." },
+    "project": { "type": "string", "minLength": 1 },
+    "tagline": { "type": "string" },
+    "repo": { "type": "string", "description": "Repo base URL for deep-linking issues (only when a remote tracker is used)." },
+    "tracker": { "enum": ["local", "github"], "default": "local", "description": "Optional issue-tracker mirror. Default 'local' = offline, no account: stories are the work items, status set by the skills, dashboard links to PRD/backlog. GitHub mirrors via the sync adapter." },
+    "release_in_flight": { "type": "string", "description": "Names the release currently being worked (e.g. 'v1', 'v2'). Written by define-backlog, in the same write as the first epic tagged to the new release (never by define-product — that would let this field point at a release with no matching epic yet while define-architecture/define-design run validate.mjs in between). Read by measure-learn (names the retro file) and the next define-brief (resolves which retro to check). Freeform, matches epics[].release." },
+    "health": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional schedule verdict shown on the dashboard (behind/ahead needs a schedule, so it is set, not derived).",
+      "properties": {
+        "overall": { "enum": ["behind", "on_track", "ahead"] },
+        "headline": { "type": "string" },
+        "action": { "type": "string" }
+      }
+    },
+    "prd": { "type": "string", "description": "Path to the PRD that REQ ids resolve against." },
+    "_meta": {
+      "type": "object", "additionalProperties": false,
+      "description": "Informational audit trail, not consumed by validate.mjs or any tooling. Overwritten each time the writing skill runs (current-state field, same spirit as release_in_flight/health — not a history log).",
+      "properties": {
+        "personas_applied": { "type": "array", "items": { "type": "string" }, "description": "Expert lenses consulted by the most recent skill that wrote this file directly (define-backlog or adopt-project), e.g. [\"PM\", \"Architect\"]." }
+      }
+    },
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional code-coverage gate. Absence of this key means no enforcement (backward-compatible with installs that predate this feature).",
+      "properties": {
+        "min": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.7, "description": "Minimum aggregate line coverage required when mode is 'enforce'." },
+        "mode": { "enum": ["off", "warn", "enforce"], "default": "warn", "description": "off = ignored; warn = measured and reported, never blocks; enforce = blocks done stories/ship-epic/CI below min." },
+        "command": { "type": "string", "description": "Override: exact command to run instead of stack auto-detection." },
+        "stacks": { "type": "array", "items": { "type": "string" }, "description": "Override: restrict detection to these stack ids (e.g. for a monorepo)." }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "order": { "type": "integer" } } }
+    },
+    "epics": { "type": "array", "items": { "$ref": "#/definitions/epic" } },
+    "stories": { "type": "array", "items": { "$ref": "#/definitions/story" } }
+  },
+  "definitions": {
+    "epic": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "order"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^E-[0-9]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "type": "string" },
+        "prd_ref": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] },
+        "order": { "type": "integer" },
+        "estimate": { "type": "number", "description": "Optional size estimate (days or points)." },
+        "target_date": { "type": "string", "description": "Optional target completion date YYYY-MM-DD; drives overdue detection." },
+        "release": { "type": "string", "description": "Product release (v1/v2). Orthogonal to phase." },
+        "vertical": { "type": "boolean", "default": true, "description": "false marks a foundational/enabler epic." },
+        "gh_issue": { "type": ["integer", "null"], "description": "Tracker issue number; only with a remote tracker." },
+        "acceptance": { "type": "string" }
+      }
+    },
+    "story": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "epic", "prd_ref", "acceptance", "status", "order"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" },
+        "title": { "type": "string", "minLength": 1 },
+        "epic": { "type": "string", "pattern": "^E-[0-9]+$", "description": "REQUIRED. The epic this story belongs to." },
+        "prd_ref": { "oneOf": [ { "type": "string", "pattern": "^REQ-[0-9]+$" }, { "type": "array", "items": { "type": "string", "pattern": "^REQ-[0-9]+$" } } ] },
+        "gh_issue": { "type": ["integer", "null"] },
+        "status": { "enum": ["notstarted", "in_progress", "blocked", "done"], "description": "Owned by the status adapter (sync-status with a tracker, or the skills in local mode). Never hand-edit casually." },
+        "blocked_by": { "type": "array", "items": { "type": "string", "pattern": "^S-[0-9]+[a-z]?$" }, "default": [], "description": "Story ids this depends on. Absence means no known dependencies." },
+        "order": { "type": "integer" },
+        "estimate": { "type": "number" },
+        "acceptance": { "type": "string", "minLength": 1 },
+        "design_ref": { "type": "string", "description": "Optional path to the docs/design/screens/*.md this story implements (e.g. docs/design/screens/S-08-flight-form.md). One screen per story — a story needing several is a signal to split it. Set by define-backlog when a screen doc exists; read by define-epic into the story's acceptance criteria." },
+        "verify": {
+          "type": "object", "additionalProperties": false,
+          "properties": { "ci": { "enum": ["pass", "fail", "pending", "none"] }, "coverage": { "type": "number", "minimum": 0, "maximum": 1 }, "commit": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+name: Throughline
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  validate-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/validate.mjs
+      # Blanket (no --tier) mode: only enforces a doc tier once its own gate has actually
+      # been cleared once (status: approved) — a headless project that never touches the
+      # design tier, or a repo mid-way through writing its first PRD, must not fail CI
+      # forever on scaffolded placeholder content. Once a tier is approved, this protects
+      # it from silently regressing on every commit after that.
+      - run: node scripts/check-docs.mjs
+      - run: node scripts/build-dashboard.mjs --out /tmp/PROGRESS_DASHBOARD.html
+
+  # First job that runs the product's own tests, not just the backlog contract.
+  # Add a matching setup step (setup-python / setup-go / setup-java / dtolnay/rust-toolchain)
+  # if this repo isn't Node — without it, coverage.mjs will report "needs_setup", which
+  # this job treats as a warning annotation, never a hard failure (a missing toolchain
+  # step is an infra gap, not a coverage regression).
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # - uses: actions/setup-python@v5
+      #   with: { python-version: '3.x' }
+      # - uses: actions/setup-go@v5
+      #   with: { go-version: 'stable' }
+      # - uses: actions/setup-java@v4
+      #   with: { distribution: 'temurin', java-version: '21' }
+      # `|| true`: a freshly bootstrapped repo has no product code yet and often no
+      # lockfile — that's the "skipped" case below, not a real CI failure.
+      - run: npm ci --ignore-scripts || true
+      - run: node scripts/coverage.mjs --json > /tmp/coverage-summary.json || true
+      - name: Evaluate coverage result
+        run: |
+          node -e "
+            const s = JSON.parse(require('fs').readFileSync('/tmp/coverage-summary.json', 'utf8'));
+            console.log('coverage status:', s.status, s.aggregate?.pct != null ? (s.aggregate.pct * 100).toFixed(1) + '%' : '');
+            if (s.status === 'needs_setup' || s.status === 'skipped') {
+              console.log('::warning::coverage.mjs status=' + s.status + ' — see job output above for the recommended setup command.');
+              process.exit(0);
+            }
+            process.exit(s.passed ? 0 : 1);
+          "
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage/lcov.info
+            coverage.xml
+            .throughline/coverage/**
+          if-no-files-found: ignore
