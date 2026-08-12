@@ -1507,6 +1507,31 @@ test('ensure-branch.mjs --name always lands on that exact branch: create, switch
   }
 });
 
+test('ensure-branch.mjs rejects --name=main and --name=master without switching branches, from any starting state', () => {
+  const root = makeProject('ensure-branch-protected-name');
+  try {
+    initGitWithCommit(root);
+    assert.equal(spawnSync('git', ['checkout', '-qb', 'some/work'], { cwd: root, encoding: 'utf8' }).status, 0);
+
+    const rejectMain = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=main']);
+    assert.notEqual(rejectMain.status, 0);
+    assert.match(rejectMain.stderr, /protected branch/);
+    assert.equal(currentBranch(root), 'some/work', '--name=main must never switch the working tree');
+
+    const rejectMaster = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=master']);
+    assert.notEqual(rejectMaster.status, 0);
+    assert.equal(currentBranch(root), 'some/work');
+
+    // Already sitting directly on main and asked to "confirm" --name=main: still rejected,
+    // never treated as a no-op affirmation of being on a protected branch.
+    assert.equal(spawnSync('git', ['checkout', '-q', 'main'], { cwd: root, encoding: 'utf8' }).status, 0);
+    const rejectFromMain = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=main']);
+    assert.notEqual(rejectFromMain.status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('ensure-branch.mjs --check-only blocks on main/master without mutating, and passes off it', () => {
   const root = makeProject('ensure-branch-check-only');
   try {
