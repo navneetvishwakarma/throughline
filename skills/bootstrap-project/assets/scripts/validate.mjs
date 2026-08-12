@@ -53,7 +53,18 @@ if (data.schema !== 2) err('schema must be 2 (got ' + JSON.stringify(data.schema
 if (!data.project) err('project is required');
 if (!data.prd) err('prd path is required');
 if (data.tracker && !TRACKERS.includes(data.tracker)) err("tracker must be one of " + TRACKERS.join('|') + " (got " + JSON.stringify(data.tracker) + ")");
-if (data.release_in_flight && (data.epics || []).length && !(data.epics || []).some((e) => e.release === data.release_in_flight)) err('release_in_flight ' + JSON.stringify(data.release_in_flight) + ' does not match any epics[].release');
+// Two different notions of "release" here: the mismatch check (release_in_flight present)
+// compares against each epic's EFFECTIVE release (untagged epics default to v1, matching
+// build-dashboard.mjs's own convention), while the required-field check (release_in_flight
+// absent) only cares about epics with an EXPLICIT tag -- an all-implicit-v1 backlog never
+// needs release_in_flight set at all.
+const epicEffectiveReleases = [...new Set((data.epics || []).map((e) => e.release || 'v1'))];
+const explicitEpicReleases = [...new Set((data.epics || []).filter((e) => e.release != null).map((e) => e.release))];
+if (data.release_in_flight) {
+  if ((data.epics || []).length && !epicEffectiveReleases.includes(data.release_in_flight)) err('release_in_flight ' + JSON.stringify(data.release_in_flight) + ' does not match any epics[].release');
+} else if (explicitEpicReleases.length) {
+  err('epics declare explicit release value(s) (' + explicitEpicReleases.join(', ') + ') but release_in_flight is not set — set it to one of them so the dashboard and gates know which release is current.');
+}
 
 const COVERAGE_MODES = ['off', 'warn', 'enforce'];
 function validateCoverage(coverage) {

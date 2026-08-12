@@ -76,6 +76,10 @@ function gateSection() {
   }).join('');
   return '<div class="gaterow"><span class="gatelabel">Gates</span><div class="gatestrip">' + pills + '</div></div>';
 }
+function releaseWarningSection() {
+  if (!releaseConfigWarning) return '';
+  return '<div class="covrow" style="background:#fdecec"><span class="covlabel" style="color:#e5484d">Config warning</span><span>' + esc(releaseConfigWarning) + '</span></div>';
+}
 const epics = (data.epics || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 const repo = (data.repo || '').replace(/\/$/, '');
 const prdPath = data.prd || 'docs/product/06-prd.md';
@@ -108,12 +112,26 @@ for (const s of stories) { if (!byEpic.has(s.epic)) byEpic.set(s.epic, []); byEp
 // convention — v1 epics are typically untagged; only v2+ epics get an explicit tag).
 // release_in_flight is the one field naming which release is currently being worked
 // (advanced by define-backlog, never define-product — see its own reconcile rules).
-const currentRelease = data.release_in_flight || 'v1';
 const epicRelease = (e) => e.release || 'v1';
+const hasExplicitEpicRelease = epics.some((e) => e.release != null);
 const releaseOrder = [];
 for (const e of epics) { const r = epicRelease(e); if (!releaseOrder.includes(r)) releaseOrder.push(r); }
 function releaseEpics(rel) { return epics.filter((e) => epicRelease(e) === rel); }
 function releaseStoryList(rel) { const ids = new Set(releaseEpics(rel).map((e) => e.id)); return stories.filter((s) => ids.has(s.epic)); }
+// validate.mjs requires release_in_flight once any epic declares an explicit release, so this
+// fallback only fires against a backlog.json that was never validated, or predates this check.
+// It must pick a real declared release and say so -- never invent a lowercase 'v1' that could
+// report a false 0/0 "on track" for a release that has no epics at all.
+let currentRelease = data.release_in_flight;
+let releaseConfigWarning = null;
+if (!currentRelease) {
+  if (hasExplicitEpicRelease) {
+    currentRelease = releaseOrder.find((r) => rollup(releaseStoryList(r)).status !== 'done') || releaseOrder[0];
+    releaseConfigWarning = 'release_in_flight is not set, but epics declare explicit release(s) (' + releaseOrder.join(', ') + '). Showing "' + currentRelease + '" — set release_in_flight in backlog.json to make this authoritative.';
+  } else {
+    currentRelease = 'v1';
+  }
+}
 const currentEpics = releaseEpics(currentRelease);
 const currentEpicIds = new Set(currentEpics.map((e) => e.id));
 const currentStories = stories.filter((s) => currentEpicIds.has(s.epic));
@@ -341,6 +359,7 @@ const html = `<!DOCTYPE html>
   <div class="hl">${esc(headline)}</div>
   <div class="act">${esc(action)}</div>
 </div>
+${releaseWarningSection()}
 ${coverageSection()}
 <h2>Work board &middot; ${esc(currentRelease)}</h2>
 <div class="board">

@@ -373,6 +373,22 @@ test('validate.mjs checks release_in_flight against epics[].release', () => {
   }
 });
 
+test('validate.mjs requires release_in_flight once any epic declares an explicit release', () => {
+  const root = makeProject('release-in-flight-required');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, release: 'v2', prd_ref: 'REQ-01' }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /epics declare explicit release value\(s\) \(v2\) but release_in_flight is not set/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('bootstrap seeds release_in_flight and validate.mjs accepts it before any epics exist', () => {
   const root = makeProject('release-in-flight-seed');
   try {
@@ -1028,6 +1044,44 @@ test('build-dashboard.mjs renders the needs_setup nudge and a passing coverage s
     const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
     assert.match(html, /82\.4%/);
     assert.match(html, /coverage\/lcov\.info/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs never invents a lowercase v1 when release_in_flight is missing but epics declare explicit releases', () => {
+  const root = makeProject('dashboard-no-invented-v1');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'V2 work', order: 0, release: 'v2', prd_ref: 'REQ-01' }],
+      stories: [{ id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'It renders.', blocked_by: [], status: 'notstarted', order: 0 }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /Epics &middot; v2/, 'must select the actual declared release, not an invented v1');
+    assert.doesNotMatch(html, /Epics &middot; v1/);
+    assert.match(html, /Config warning/);
+    assert.match(html, /release_in_flight is not set/);
+    assert.match(html, /1 of 1 stories done|0 of 1 stories done/, 'the 1/1-scoped-to-v2 story must be counted, not a false 0/0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs keeps implicit v1 when no epic declares an explicit release and release_in_flight is absent', () => {
+  const root = makeProject('dashboard-implicit-v1-unchanged');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /Epics &middot; v1/);
+    assert.doesNotMatch(html, /Config warning/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
