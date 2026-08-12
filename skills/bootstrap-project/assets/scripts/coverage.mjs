@@ -9,7 +9,7 @@
 //                                  [--story <id>] [--stack <id>] [--threshold <0-1>]
 //                                  [--out <path>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const root = process.cwd();
@@ -240,7 +240,39 @@ function customStack(command) {
   };
 }
 
-const ALL_STACKS = coverageConfig?.command
+// ---- explicit monorepo targets (coverage.targets) -- take priority over auto-detection ----
+function resolveWithinRoot(relPath, label) {
+  const abs = resolve(root, relPath);
+  const rel = relative(root, abs);
+  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+    console.error(label + ' escapes the repository root: ' + relPath);
+    process.exit(2);
+  }
+  return { abs, rel: rel === '' ? '.' : rel };
+}
+
+function targetStack(t) {
+  if (!t || typeof t.id !== 'string' || !t.id.trim() || typeof t.cwd !== 'string' || !t.cwd.trim()
+    || typeof t.command !== 'string' || !t.command.trim() || typeof t.summary !== 'string' || !t.summary.trim()) {
+    console.error('Malformed coverage.targets entry: ' + JSON.stringify(t) + ' (run node scripts/validate.mjs for details).');
+    process.exit(2);
+  }
+  const cwd = resolveWithinRoot(t.cwd, 'coverage target "' + t.id + '" cwd');
+  const summary = resolveWithinRoot(join(t.cwd, t.summary), 'coverage target "' + t.id + '" summary');
+  const lcov = t.lcov ? resolveWithinRoot(join(t.cwd, t.lcov), 'coverage target "' + t.id + '" lcov') : null;
+  return {
+    id: t.id, tool: t.command, needsPkg: null,
+    resolvable: () => existsSync(cwd.abs),
+    run: () => sh(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', t.command] : ['-c', t.command], { cwd: cwd.abs }),
+    report: () => readIstanbulSummary(summary.rel),
+    reportFormat: 'lcov', reportPath: lcov ? lcov.rel : summary.rel,
+  };
+}
+const explicitTargets = Array.isArray(coverageConfig?.targets) ? coverageConfig.targets : null;
+
+const ALL_STACKS = explicitTargets && explicitTargets.length
+  ? explicitTargets.map(targetStack)
+  : coverageConfig?.command
   ? [customStack(coverageConfig.command)]
   : [nodeStack, pythonStack, goStack, javaStack, rustStack].map((f) => f()).filter(Boolean);
 const stacks = ALL_STACKS.filter((s) => (!stackFilter || s.id === stackFilter) && (!stackAllowlist || stackAllowlist.includes(s.id)));

@@ -733,6 +733,137 @@ test('coverage.mjs exits 2 for an unknown --stack identifier requested explicitl
   }
 });
 
+test('coverage.mjs runs two workspace targets and aggregates by weighted covered/total, not an unweighted average of percentages', () => {
+  const root = makeProject('coverage-targets-weighted');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    mkdirSync(join(root, 'apps/mobile'), { recursive: true });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 80 } } }));
+    `, 'utf8');
+    writeFileSync(join(root, 'apps/mobile/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 900, covered: 90 } } }));
+    `, 'utf8');
+
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+          { id: 'mobile', cwd: 'apps/mobile', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks.length, 2);
+    assert.equal(summary.stacks.find((s) => s.stack === 'backend').pct, 0.8);
+    assert.equal(summary.stacks.find((s) => s.stack === 'mobile').pct, 0.1);
+    // weighted: (80 + 90) / (100 + 900) = 0.17 -- a naive average of the two percentages
+    // would be (0.8 + 0.1) / 2 = 0.45, which this must NOT match.
+    assert.equal(summary.aggregate.pct, 170 / 1000);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs fails closed when a target command fails, and separately when its declared report is missing', () => {
+  const root = makeProject('coverage-targets-failure');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'enforce', min: 0,
+        targets: [
+          { id: 'crashes', cwd: 'apps/backend', command: 'node -e "process.exit(1)"', summary: 'coverage/coverage-summary.json' },
+          { id: 'no-report', cwd: 'apps/backend', command: 'node -e "0"', summary: 'coverage/does-not-exist.json' },
+        ],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(result.status, 0);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks.find((s) => s.stack === 'crashes').status, 'error');
+    assert.equal(summary.stacks.find((s) => s.stack === 'no-report').status, 'error');
+    assert.equal(summary.passed, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs rejects a target path that escapes the repository root', () => {
+  const root = makeProject('coverage-targets-traversal');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [{ id: 'escape', cwd: '../../outside', command: 'node -e "0"', summary: 'coverage/coverage-summary.json' }],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /escapes the repository root/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs --stack selects exactly one configured target, running and reporting only that one', () => {
+  const root = makeProject('coverage-targets-select-one');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    mkdirSync(join(root, 'apps/mobile'), { recursive: true });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 10, covered: 10 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+          { id: 'mobile', cwd: 'apps/mobile', command: 'node -e "process.exit(1)"', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json', '--stack', 'backend']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks.length, 1);
+    assert.equal(summary.stacks[0].stack, 'backend');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs preserves single-root auto-detection when coverage.targets is absent', () => {
+  const root = makeProject('coverage-targets-absent-backward-compat');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, 'needs_setup');
+    assert.equal(summary.stacks[0].stack, 'node-vitest');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate.mjs enforces coverage.min only when coverage.mode is enforce, and stays backward-compatible when the key is absent', () => {
   const root = makeProject('coverage-validate');
   try {
