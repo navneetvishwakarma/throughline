@@ -652,6 +652,87 @@ test('coverage.mjs runs the real run/parse/aggregate/--story chain end to end vi
   }
 });
 
+test('coverage.mjs exits 2 for an unknown coverage.mode, never treating a typo as off', () => {
+  const root = makeProject('coverage-runtime-bad-mode');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforcee', min: 0.9 } }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Invalid coverage\.mode/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 for a non-numeric or out-of-range coverage.min', () => {
+  const root = makeProject('coverage-runtime-bad-min');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 'high' } }));
+    const nonNumeric = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(nonNumeric.status, 2, nonNumeric.stderr || nonNumeric.stdout);
+    assert.match(nonNumeric.stderr, /Invalid coverage\.min/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 1.5 } }));
+    const outOfRange = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(outOfRange.status, 2, outOfRange.stderr || outOfRange.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 for an invalid --threshold, including a non-numeric string', () => {
+  const root = makeProject('coverage-runtime-bad-threshold');
+  try {
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json', '--threshold', 'nope']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Invalid --threshold/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs treats mode off and warn as non-blocking only when spelled correctly', () => {
+  const root = makeProject('coverage-mode-spelling');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'off', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const off = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(off.status, 0, off.stderr || off.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const warn = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(warn.status, 0, warn.stderr || warn.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'Off', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const wrongCase = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(wrongCase.status, 2, wrongCase.stderr || wrongCase.stdout, 'a mode typo must never silently behave like off');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 for an unknown --stack identifier requested explicitly', () => {
+  const root = makeProject('coverage-unknown-stack');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json', '--stack', 'does-not-exist']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Unknown --stack "does-not-exist"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate.mjs enforces coverage.min only when coverage.mode is enforce, and stays backward-compatible when the key is absent', () => {
   const root = makeProject('coverage-validate');
   try {

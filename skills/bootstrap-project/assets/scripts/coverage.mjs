@@ -50,8 +50,33 @@ function hasPkgDep(pkg, name) {
 
 const backlog = readJson(backlogPath);
 const coverageConfig = backlog?.coverage || null; // absent key = enforcement off, per contract
-const resolvedMode = coverageConfig?.mode || 'off';
-const threshold = thresholdArg != null ? Number(thresholdArg) : (coverageConfig?.min ?? 0.7);
+
+const VALID_MODES = ['off', 'warn', 'enforce'];
+const rawMode = coverageConfig?.mode;
+const resolvedMode = rawMode === undefined ? 'off' : rawMode;
+if (!VALID_MODES.includes(resolvedMode)) {
+  console.error('Invalid coverage.mode: ' + JSON.stringify(rawMode) + ' (must be one of ' + VALID_MODES.join('|') + '). Refusing to guess -- fix docs/engineering/backlog.json (validate.mjs also rejects this).');
+  process.exit(2);
+}
+
+function isValidFraction(n) { return typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1; }
+
+const rawMin = coverageConfig?.min;
+if (rawMin !== undefined && !isValidFraction(rawMin)) {
+  console.error('Invalid coverage.min: ' + JSON.stringify(rawMin) + ' (must be a finite number from 0 through 1).');
+  process.exit(2);
+}
+const baseThreshold = rawMin ?? 0.7;
+
+let threshold = baseThreshold;
+if (thresholdArg != null) {
+  const parsedThreshold = Number(thresholdArg);
+  if (!isValidFraction(parsedThreshold)) {
+    console.error('Invalid --threshold: ' + JSON.stringify(thresholdArg) + ' (must be a finite number from 0 through 1).');
+    process.exit(2);
+  }
+  threshold = parsedThreshold;
+}
 const stackAllowlist = coverageConfig?.stacks;
 
 // ---- istanbul-style json-summary reader (vitest/jest/c8) ----
@@ -219,6 +244,10 @@ const ALL_STACKS = coverageConfig?.command
   ? [customStack(coverageConfig.command)]
   : [nodeStack, pythonStack, goStack, javaStack, rustStack].map((f) => f()).filter(Boolean);
 const stacks = ALL_STACKS.filter((s) => (!stackFilter || s.id === stackFilter) && (!stackAllowlist || stackAllowlist.includes(s.id)));
+if (stackFilter && !ALL_STACKS.some((s) => s.id === stackFilter)) {
+  console.error('Unknown --stack "' + stackFilter + '". Known: ' + (ALL_STACKS.map((s) => s.id).join(', ') || '(none detected)'));
+  process.exit(2);
+}
 
 function setupHintFor(stack) {
   if (stack.setupHint) return stack.setupHint;
