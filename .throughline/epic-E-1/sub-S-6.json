@@ -1,0 +1,17 @@
+{
+  "id": "S-6",
+  "title": "ensure-branch.mjs rejects --name=main and --name=master",
+  "goal": "Never let ensure-branch.mjs --name=<protected> check the caller directly onto a protected branch.",
+  "in_scope": [
+    "Check explicitName against PROTECTED before comparing it to the current branch or calling switchTo(), so the rejection applies regardless of starting state (feature branch, already on main, or detached HEAD)"
+  ],
+  "out_of_scope": [
+    "Any change to the auto-generate (no --name) path, which already treats detached HEAD / main / master as protected correctly",
+    "Any change to --check-only (already correct)"
+  ],
+  "acceptance": "Both names exit non-zero and leave the working tree exactly where it was, whether called from a feature branch, from main itself, or from detached HEAD.",
+  "invariants": [
+    "Non-protected --name= values (e.g. epic/E-1-thing) are completely unaffected"
+  ],
+  "prd_ref": "REQ-06"
+}

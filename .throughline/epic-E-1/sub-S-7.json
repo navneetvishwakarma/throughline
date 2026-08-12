@@ -1,0 +1,16 @@
+{
+  "id": "S-7",
+  "title": "Bump plugin version to 0.3.2 across every manifest",
+  "goal": "Ship 0.3.2 consistently across every version-bearing file so doctor.mjs's manifest checks and the README stay truthful about what version is installed.",
+  "in_scope": [
+    "package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json (metadata.version and plugins[0].version), .codex-plugin/plugin.json, README.md"
+  ],
+  "out_of_scope": [
+    "Any CHANGELOG (none exists in this repo)"
+  ],
+  "acceptance": "package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json (both version fields), .codex-plugin/plugin.json, and README.md all read 0.3.2; npm run doctor passes.",
+  "invariants": [
+    "Every other requirement (S-1..S-6) must already be implemented and passing before this story lands, since it is the release-mechanics capstone"
+  ],
+  "prd_ref": "REQ-07"
+}
