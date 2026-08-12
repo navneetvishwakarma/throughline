@@ -48,8 +48,12 @@
       "prd_ref": "REQ-02",
       "acceptance": "An unknown coverage.mode, a non-numeric/out-of-range coverage.min, an invalid --threshold, or an unknown --stack all exit 2 with a clear message; only correctly-spelled off/warn bypass threshold enforcement.",
       "blocked_by": [],
-      "status": "notstarted",
-      "order": 1
+      "status": "in_progress",
+      "order": 1,
+      "verify": {
+        "ci": "pass",
+        "commit": "b80545e"
+      }
     },
     {
       "id": "S-3",
