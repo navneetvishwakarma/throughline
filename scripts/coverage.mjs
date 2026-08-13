@@ -8,7 +8,7 @@
 // Usage: node scripts/coverage.mjs [--json] [--check] [--reuse] [--setup]
 //                                  [--story <id>] [--stack <id>] [--threshold <0-1>]
 //                                  [--out <path>]
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -238,6 +238,7 @@ function customStack(command) {
     resolvable: () => true,
     run: () => sh(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', command] : ['-c', command]),
     report: () => readIstanbulSummary('coverage/coverage-summary.json'),
+    summaryPath: 'coverage/coverage-summary.json',
     reportFormat: 'lcov', reportPath: 'coverage/lcov.info',
   };
 }
@@ -267,6 +268,7 @@ function targetStack(t) {
     resolvable: () => existsSync(cwd.abs),
     run: () => sh(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', t.command] : ['-c', t.command], { cwd: cwd.abs }),
     report: () => readIstanbulSummary(summary.rel),
+    summaryPath: summary.rel,
     reportFormat: 'lcov', reportPath: lcov ? lcov.rel : summary.rel,
   };
 }
@@ -277,9 +279,20 @@ const ALL_STACKS = explicitTargets && explicitTargets.length
   : coverageConfig?.command
   ? [customStack(coverageConfig.command)]
   : [nodeStack, pythonStack, goStack, javaStack, rustStack].map((f) => f()).filter(Boolean);
+const unknownConfiguredStack = Array.isArray(stackAllowlist)
+  ? stackAllowlist.find((id) => !ALL_STACKS.some((s) => s.id === id))
+  : undefined;
+if (unknownConfiguredStack !== undefined) {
+  console.error('Unknown coverage.stacks identifier "' + unknownConfiguredStack + '". Known: ' + (ALL_STACKS.map((s) => s.id).join(', ') || '(none detected)'));
+  process.exit(2);
+}
 const stacks = ALL_STACKS.filter((s) => (!stackFilter || s.id === stackFilter) && (!stackAllowlist || stackAllowlist.includes(s.id)));
 if (stackFilter && !ALL_STACKS.some((s) => s.id === stackFilter)) {
   console.error('Unknown --stack "' + stackFilter + '". Known: ' + (ALL_STACKS.map((s) => s.id).join(', ') || '(none detected)'));
+  process.exit(2);
+}
+if (Array.isArray(stackAllowlist) && !stacks.length) {
+  console.error('Configured coverage.stacks selected no detected stack. Known: ' + (ALL_STACKS.map((s) => s.id).join(', ') || '(none detected)'));
   process.exit(2);
 }
 
@@ -349,13 +362,16 @@ if (doReuse) {
       return { stack: stack.id, tool: stack.tool, status: 'needs_setup', hint: setupHintFor(stack), passed: resolvedMode !== 'enforce' };
     }
     let runResult;
-    try { runResult = stack.run(); } catch (e) { return { stack: stack.id, tool: stack.tool, status: 'error', message: String(e?.message || e), passed: false }; }
+    try {
+      if (stack.summaryPath) rmSync(join(root, stack.summaryPath), { force: true });
+      runResult = stack.run();
+    } catch (e) { return { stack: stack.id, tool: stack.tool, status: 'error', message: String(e?.message || e), passed: false }; }
     if (!ok(runResult)) {
       return { stack: stack.id, tool: stack.tool, status: 'error', message: (runResult.stderr || runResult.stdout || 'command failed').slice(0, 2000), passed: false };
     }
     let parsed;
     try { parsed = stack.report(); } catch { parsed = null; }
-    if (!parsed) return { stack: stack.id, tool: stack.tool, status: 'error', message: 'coverage ran but no report found at ' + stack.reportPath, passed: false };
+    if (!parsed) return { stack: stack.id, tool: stack.tool, status: 'error', message: 'coverage ran but no report found at ' + (stack.summaryPath || stack.reportPath), passed: false };
     return {
       stack: stack.id, tool: stack.tool, status: 'ok',
       reportFormat: stack.reportFormat, reportPath: stack.reportPath,
