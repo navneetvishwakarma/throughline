@@ -1,0 +1,24 @@
+{
+  "id": "S-12",
+  "title": "Reject empty, malformed, or placeholder planning documents",
+  "goal": "Stop product and architecture gates from approving untouched templates or requirement tables with no valid contract rows.",
+  "in_scope": [
+    "Fail product-tier validation when the PRD contains no valid requirement rows",
+    "Detect and reject malformed REQ-like rows instead of silently discarding them",
+    "Detect known template placeholder markers across architecture-tier documents and ADRs",
+    "Cover the current system overview, tech stack, data model, API design, infrastructure, and ADR scaffold files",
+    "Require a substantive threat model in the system overview or a dedicated security-threat-model.md, with Architect and Security persona evidence"
+  ],
+  "out_of_scope": [
+    "Subjective architecture quality scoring",
+    "Writing the missing architecture or security design itself",
+    "Changing design-tier visual approval semantics"
+  ],
+  "acceptance": "check-docs.mjs rejects a PRD with zero valid requirement rows or malformed REQ-like rows, and an explicit architecture-tier check rejects template placeholder content in the system, stack, data, API, infrastructure, and ADR documents and requires a substantive security threat model so draft scaffolds cannot satisfy G4 validation.",
+  "invariants": [
+    "Tier-scoped checks report only the selected tier plus required cross-reference parsing",
+    "A syntactically valid front-matter status cannot mask placeholder body content",
+    "Filled, internally consistent product and architecture fixtures continue to pass"
+  ],
+  "prd_ref": "REQ-14"
+}

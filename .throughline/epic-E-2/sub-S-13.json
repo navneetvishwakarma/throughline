@@ -1,0 +1,23 @@
+{
+  "id": "S-13",
+  "title": "Reopen GitHub-backed stories and invalidate dependent completion",
+  "goal": "Keep backlog and release rollups truthful when a previously closed GitHub issue reopens.",
+  "in_scope": [
+    "Move any linked done story to in_progress when its mirrored GitHub issue is OPEN",
+    "Recompute direct and transitive blocked_by state after tracker updates",
+    "Prevent done dependents from remaining complete while any prerequisite is not done",
+    "Add regression fixtures for reopened issues and dependency chains"
+  ],
+  "out_of_scope": [
+    "Calling the GitHub API directly from sync-status.mjs",
+    "Changing local tracker ownership rules",
+    "Deleting prior verify evidence when status reopens"
+  ],
+  "acceptance": "When a linked GitHub issue state changes from CLOSED to OPEN, sync-status.mjs moves its story from done to in_progress and recomputes dependency state so any story, including a previously done dependent, cannot remain complete while a blocked_by prerequisite is open.",
+  "invariants": [
+    "GitHub issue state remains authoritative in GitHub tracker mode",
+    "No done story may depend on a non-done story after synchronization",
+    "Existing verification evidence is preserved for audit while current status reflects reopened work"
+  ],
+  "prd_ref": "REQ-16"
+}

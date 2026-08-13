@@ -1,0 +1,26 @@
+{
+  "id": "S-14",
+  "title": "Align the declared Node runtime with the bundled c8 toolchain",
+  "goal": "Make the supported runtime contract match the test and coverage dependencies users actually install.",
+  "in_scope": [
+    "Raise package.json engines.node to ^20.19.0 || ^22.12.0 || >=23",
+    "Update README runtime prerequisites to the same supported range",
+    "Add a manifest regression test that compares the declared engine with c8 12's supported range",
+    "Verify tests, doctor, coverage, and installer dry runs on the active supported runtime"
+  ],
+  "out_of_scope": [
+    "Pinning an older c8 solely to retain Node 18/19",
+    "Maintaining unsupported end-of-life Node releases",
+    "Adding a runtime version manager"
+  ],
+  "acceptance": "package.json and README declare a Node engine range compatible with c8 12 (^20.19.0 || ^22.12.0 || >=23), strict-engine installation rejects unsupported Node 18/19 before tool execution, and supported runtimes can install and run the test and coverage commands without engine conflicts.",
+  "invariants": [
+    "Documentation and package metadata advertise the same runtime support",
+    "The bundled development toolchain has no engine range broader than the package contract",
+    "Runtime alignment does not change Throughline's platform-neutral state contract"
+  ],
+  "prd_ref": [
+    "REQ-10",
+    "REQ-15"
+  ]
+}

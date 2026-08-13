@@ -12,18 +12,23 @@
     },
     "G5": {
       "status": "approved",
-      "note": "backlog approved: E-1 with 7 stories mapping to REQ-01..REQ-07",
-      "updatedAt": "2026-08-12T16:25:32.230Z"
+      "note": "V1 enhancements backlog approved from the 13 review findings: E-2 with seven grouped stories",
+      "updatedAt": "2026-08-13T08:35:49.127Z"
     },
     "G6": {
       "status": "approved",
-      "note": "epic plan approved per standing user approval to implement the 0.3.2 plan end-to-end",
-      "updatedAt": "2026-08-12T16:27:32.492Z",
+      "note": "V1 enhancements epic plan approved",
+      "updatedAt": "2026-08-13T08:38:01.065Z",
       "subjects": {
         "E-1": {
           "status": "approved",
           "note": "epic plan approved per standing user approval to implement the 0.3.2 plan end-to-end",
           "updatedAt": "2026-08-12T16:27:32.492Z"
+        },
+        "E-2": {
+          "status": "approved",
+          "note": "V1 enhancements epic plan approved",
+          "updatedAt": "2026-08-13T08:38:01.065Z"
         }
       }
     },

@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-08-13T12:39:00.297Z",
+  "status": "ok",
+  "stacks": [
+    {
+      "stack": "node-test",
+      "tool": "c8",
+      "status": "ok",
+      "reportFormat": "lcov",
+      "reportPath": "coverage/lcov.info",
+      "covered": 286,
+      "total": 350,
+      "pct": 0.8171428571428572,
+      "passed": true
+    }
+  ],
+  "commit": "05f441cb6f692cb7728d34b24624007cd85bcd0c",
+  "aggregate": {
+    "pct": 0.8171428571428572
+  },
+  "threshold": 0.7,
+  "mode": "warn",
+  "passed": true
+}
