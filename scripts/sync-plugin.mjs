@@ -58,7 +58,7 @@ function repairState() {
     let entries = [];
     try { entries = readdirSync(base); } catch { continue; }
     for (const entry of entries) {
-      if (/^(epic|ship)-/.test(entry) || entry === 'gates.json' || entry === 'plugin-version.json') {
+      if (/^(epic|ship|feature)-/.test(entry) || entry === 'gates.json' || entry === 'plugin-version.json') {
         found.push({ rel: wrongRoot + '/' + entry, src: join(base, entry), dest: join(root, '.throughline', entry) });
       }
     }
@@ -235,17 +235,24 @@ for (const item of SEED_ONLY_FILES) {
   syncFile('AGENTS.md', raw.replaceAll('<PROJECT_NAME>', project));
 }
 
-// .githooks/pre-commit is the source; .git/hooks/pre-commit is the live, installed copy.
-// init-project.mjs only installs the hook if none exists yet, so on a midlife project the
-// live hook silently never picks up a newer .githooks/pre-commit unless we refresh it here.
 if (apply && existsSync(join(root, '.git')) && existsSync(join(root, '.githooks/pre-commit'))) {
   const hookDest = join(root, '.git/hooks/pre-commit');
   const hookSrc = join(root, '.githooks/pre-commit');
-  if (readSafe(hookDest) !== readSafe(hookSrc)) {
+  const liveHook = readSafe(hookDest);
+  const currentHook = readSafe(hookSrc);
+  const managedHook = /^\s*node scripts\/ensure-branch\.mjs --check-only\s*$/m.test(liveHook || '')
+    && /^\s*node scripts\/validate\.mjs\s*$/m.test(liveHook || '');
+  if (liveHook == null) {
     mkdirSync(dirname(hookDest), { recursive: true });
     copyFileSync(hookSrc, hookDest);
     try { chmodSync(hookDest, 0o755); } catch {}
+    results.updated.push('.git/hooks/pre-commit (installed from .githooks/pre-commit)');
+  } else if (liveHook !== currentHook && managedHook) {
+    copyFileSync(hookSrc, hookDest);
+    try { chmodSync(hookDest, 0o755); } catch {}
     results.updated.push('.git/hooks/pre-commit (refreshed from .githooks/pre-commit)');
+  } else if (liveHook !== currentHook) {
+    console.log('custom .git/hooks/pre-commit preserved; review it and manually compose the Throughline checks from .githooks/pre-commit.');
   }
 }
 

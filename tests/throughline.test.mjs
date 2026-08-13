@@ -1553,19 +1553,75 @@ test('sync-plugin.mjs --force=<path> resolves only the named file, leaving other
   }
 });
 
-test('sync-plugin.mjs refreshes an already-installed git pre-commit hook when .githooks/pre-commit changes', () => {
-  const root = makeProject('sync-hook');
+test('sync-plugin.mjs preserves an unrelated project pre-commit hook and requests manual composition', () => {
+  const root = makeProject('sync-custom-hook');
   try {
     const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
     assert.equal(initGit.status, 0, initGit.stderr);
     const hookPath = join(root, '.git/hooks/pre-commit');
     mkdirSync(dirname(hookPath), { recursive: true });
-    writeFileSync(hookPath, '#!/bin/sh\necho stale hook\n', 'utf8');
+    const customHook = '#!/bin/sh\nnpm run lint\nnpm run security-check\n';
+    writeFileSync(hookPath, customHook, 'utf8');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
-    const refreshed = readFileSync(hookPath, 'utf8');
-    assert.equal(refreshed, readFileSync(join(root, '.githooks/pre-commit'), 'utf8'), 'the live hook should now match .githooks/pre-commit');
+    assert.equal(readFileSync(hookPath, 'utf8'), customHook, 'an unrelated project hook must remain byte-identical');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs preserves a partial Throughline-like hook as project-owned', () => {
+  const root = makeProject('sync-partial-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const partialHook = '#!/bin/sh\nnode scripts/validate.mjs\nnpm run lint\n';
+    writeFileSync(hookPath, partialHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), partialHook, 'one Throughline command is not enough to claim ownership');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs does not claim a hook containing only commented Throughline commands', () => {
+  const root = makeProject('sync-commented-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const customHook = '#!/bin/sh\n# node scripts/ensure-branch.mjs --check-only\n# node scripts/validate.mjs\nnpm run lint\n';
+    writeFileSync(hookPath, customHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), customHook, 'commented examples do not make a hook Throughline-managed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook', () => {
+  const root = makeProject('sync-managed-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    writeFileSync(hookPath, '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n', 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1894,7 +1950,7 @@ test('validate.mjs fails loud when feature working state is written under .claud
   }
 });
 
-test('sync-plugin.mjs --repair-state moves misplaced working state into .throughline/ and validate.mjs passes again', () => {
+test('sync-plugin.mjs --repair-state reports then moves epic and feature state from every supported legacy root', () => {
   const root = makeProject('repair-state');
   try {
     approvePrd(root);
@@ -1902,18 +1958,30 @@ test('sync-plugin.mjs --repair-state moves misplaced working state into .through
 
     mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
     writeFileSync(join(root, '.claude/epic-1/ledger.md'), '# ledger\n', 'utf8');
+    mkdirSync(join(root, '.claude/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.claude/feature-readme-fix/spec.md'), '# spec\n', 'utf8');
+    mkdirSync(join(root, '.cursor/feature-status-fix'), { recursive: true });
+    writeFileSync(join(root, '.cursor/feature-status-fix/spec.md'), '# cursor spec\n', 'utf8');
     writeFileSync(join(root, '.claude/gates.json'), '{}', 'utf8');
 
     const report = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state']);
     assert.equal(report.status, 0, report.stderr || report.stdout);
     assert.match(report.stdout, /\.claude\/epic-1/);
+    assert.match(report.stdout, /\.claude\/feature-readme-fix/);
+    assert.match(report.stdout, /\.cursor\/feature-status-fix/);
     assert.match(report.stdout, /\.claude\/gates\.json/);
     assert.equal(existsSync(join(root, '.claude/epic-1')), true, 'report-only mode must not move anything');
+    assert.equal(existsSync(join(root, '.claude/feature-readme-fix')), true, 'report-only mode must not move feature state');
+    assert.equal(existsSync(join(root, '.cursor/feature-status-fix')), true, 'report-only mode must not move feature state from another root');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state', '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
     assert.equal(existsSync(join(root, '.claude/epic-1')), false);
+    assert.equal(existsSync(join(root, '.claude/feature-readme-fix')), false);
+    assert.equal(existsSync(join(root, '.cursor/feature-status-fix')), false);
     assert.equal(existsSync(join(root, '.throughline/epic-1/ledger.md')), true);
+    assert.equal(readFileSync(join(root, '.throughline/feature-readme-fix/spec.md'), 'utf8'), '# spec\n');
+    assert.equal(readFileSync(join(root, '.throughline/feature-status-fix/spec.md'), 'utf8'), '# cursor spec\n');
     assert.equal(existsSync(join(root, '.throughline/gates.json')), true);
 
     const validate = runNode(root, join(root, 'scripts/validate.mjs'));
@@ -1923,19 +1991,19 @@ test('sync-plugin.mjs --repair-state moves misplaced working state into .through
   }
 });
 
-test('sync-plugin.mjs --repair-state flags a conflict instead of overwriting an existing .throughline/ destination', () => {
+test('sync-plugin.mjs --repair-state flags a feature conflict instead of overwriting an existing .throughline/ destination', () => {
   const root = makeProject('repair-conflict');
   try {
-    mkdirSync(join(root, '.throughline/epic-1'), { recursive: true });
-    writeFileSync(join(root, '.throughline/epic-1/ledger.md'), 'real ledger\n', 'utf8');
-    mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
-    writeFileSync(join(root, '.claude/epic-1/ledger.md'), 'stray duplicate\n', 'utf8');
+    mkdirSync(join(root, '.throughline/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.throughline/feature-readme-fix/spec.md'), 'real spec\n', 'utf8');
+    mkdirSync(join(root, '.claude/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.claude/feature-readme-fix/spec.md'), 'stray duplicate\n', 'utf8');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state', '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
     assert.match(apply.stdout, /CONFLICT/);
-    assert.equal(readFileSync(join(root, '.throughline/epic-1/ledger.md'), 'utf8'), 'real ledger\n', 'the real ledger must not be overwritten');
-    assert.equal(existsSync(join(root, '.claude/epic-1')), true, 'a conflicting item must be left in place, not silently dropped');
+    assert.equal(readFileSync(join(root, '.throughline/feature-readme-fix/spec.md'), 'utf8'), 'real spec\n', 'the real feature spec must not be overwritten');
+    assert.equal(existsSync(join(root, '.claude/feature-readme-fix')), true, 'a conflicting feature must be left in place, not silently dropped');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
