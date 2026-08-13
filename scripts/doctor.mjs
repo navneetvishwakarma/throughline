@@ -143,7 +143,11 @@ function checkScaffold() {
     }
 
     const prdPath = join(tmp, 'docs/product/06-prd.md');
-    writeFileSync(prdPath, readFileSync(prdPath, 'utf8').replace('status: draft', 'status: approved'), 'utf8');
+    const approvedPrd = readFileSync(prdPath, 'utf8')
+      .replace('status: draft', 'status: approved')
+      .replace(/^\| REQ-01 \|[^\r\n]*$/m, '| REQ-01 | Create application shell | P0 | The shell renders. | v1 |')
+      .replace(/^\| REQ-02 \|[^\r\n]*(?:\r?\n|$)/m, '');
+    writeFileSync(prdPath, approvedPrd, 'utf8');
     writeJson(join(tmp, 'docs/engineering/backlog.json'), {
       schema: 2,
       project: 'Doctor Fixture',
@@ -162,8 +166,8 @@ function checkScaffold() {
       }],
     });
     run(tmp, [process.execPath, join(tmp, 'scripts/validate.mjs')]);
-    run(tmp, [process.execPath, join(tmp, 'scripts/gate.mjs'), 'approve', 'G6', '--note', 'doctor fixture']);
-    run(tmp, [process.execPath, join(tmp, 'scripts/gate.mjs'), 'check', 'G6']);
+    run(tmp, [process.execPath, join(tmp, 'scripts/gate.mjs'), 'approve', 'G6', '--subject', 'E-1', '--note', 'doctor fixture']);
+    run(tmp, [process.execPath, join(tmp, 'scripts/gate.mjs'), 'check', 'G6', '--subject', 'E-1']);
     run(tmp, [process.execPath, join(tmp, 'scripts/build-dashboard.mjs')]);
     if (!existsSync(join(tmp, 'PROGRESS_DASHBOARD.html'))) fail('dashboard was not generated');
 
