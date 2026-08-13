@@ -34,8 +34,8 @@
     },
     "G7": {
       "status": "approved",
-      "note": "trivial one-line gitignore fix, approved via 'fix both'",
-      "updatedAt": "2026-08-13T07:55:06.405Z",
+      "note": "local epic merge approved",
+      "updatedAt": "2026-08-13T13:20:01.631Z",
       "subjects": {
         "E-1": {
           "status": "approved",
@@ -51,6 +51,11 @@
           "status": "approved",
           "note": "trivial one-line gitignore fix, approved via 'fix both'",
           "updatedAt": "2026-08-13T07:55:06.405Z"
+        },
+        "E-2": {
+          "status": "approved",
+          "note": "local epic merge approved",
+          "updatedAt": "2026-08-13T13:20:01.631Z"
         }
       }
     }
