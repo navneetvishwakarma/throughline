@@ -702,6 +702,18 @@ test('bootstrap scaffolds a real docs/design/README.md instead of a bare empty d
   }
 });
 
+test('package runtime support matches the bundled c8 toolchain', () => {
+  const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+  const packageLock = JSON.parse(readFileSync(join(repoRoot, 'package-lock.json'), 'utf8'));
+  const c8Range = packageLock.packages['node_modules/c8'].engines.node;
+  const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+
+  assert.equal(c8Range, '^20.19.0 || ^22.12.0 || >=23');
+  assert.equal(packageJson.engines.node, c8Range);
+  assert.equal(packageLock.packages[''].engines.node, c8Range);
+  assert.match(readme, /Node\.js `\^20\.19\.0 \|\| \^22\.12\.0 \|\| >=23`/);
+});
+
 test('doctor validates plugin package and scaffold fixture', () => {
   const result = runNode(repoRoot, join(repoRoot, 'scripts/doctor.mjs'));
 
