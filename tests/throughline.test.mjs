@@ -373,6 +373,22 @@ test('validate.mjs checks release_in_flight against epics[].release', () => {
   }
 });
 
+test('validate.mjs requires release_in_flight once any epic declares an explicit release', () => {
+  const root = makeProject('release-in-flight-required');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, release: 'v2', prd_ref: 'REQ-01' }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /epics declare explicit release value\(s\) \(v2\) but release_in_flight is not set/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('bootstrap seeds release_in_flight and validate.mjs accepts it before any epics exist', () => {
   const root = makeProject('release-in-flight-seed');
   try {
@@ -652,6 +668,218 @@ test('coverage.mjs runs the real run/parse/aggregate/--story chain end to end vi
   }
 });
 
+test('coverage.mjs exits 2 for an unknown coverage.mode, never treating a typo as off', () => {
+  const root = makeProject('coverage-runtime-bad-mode');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforcee', min: 0.9 } }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Invalid coverage\.mode/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 for a non-numeric or out-of-range coverage.min', () => {
+  const root = makeProject('coverage-runtime-bad-min');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 'high' } }));
+    const nonNumeric = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(nonNumeric.status, 2, nonNumeric.stderr || nonNumeric.stdout);
+    assert.match(nonNumeric.stderr, /Invalid coverage\.min/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 1.5 } }));
+    const outOfRange = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(outOfRange.status, 2, outOfRange.stderr || outOfRange.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 for an invalid --threshold, including a non-numeric string', () => {
+  const root = makeProject('coverage-runtime-bad-threshold');
+  try {
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json', '--threshold', 'nope']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Invalid --threshold/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs treats mode off and warn as non-blocking only when spelled correctly', () => {
+  const root = makeProject('coverage-mode-spelling');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'off', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const off = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(off.status, 0, off.stderr || off.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const warn = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(warn.status, 0, warn.stderr || warn.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'Off', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const wrongCase = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
+    assert.equal(wrongCase.status, 2, wrongCase.stderr || wrongCase.stdout, 'a mode typo must never silently behave like off');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 for an unknown --stack identifier requested explicitly', () => {
+  const root = makeProject('coverage-unknown-stack');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json', '--stack', 'does-not-exist']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Unknown --stack "does-not-exist"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs runs two workspace targets and aggregates by weighted covered/total, not an unweighted average of percentages', () => {
+  const root = makeProject('coverage-targets-weighted');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    mkdirSync(join(root, 'apps/mobile'), { recursive: true });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 80 } } }));
+    `, 'utf8');
+    writeFileSync(join(root, 'apps/mobile/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 900, covered: 90 } } }));
+    `, 'utf8');
+
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+          { id: 'mobile', cwd: 'apps/mobile', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks.length, 2);
+    assert.equal(summary.stacks.find((s) => s.stack === 'backend').pct, 0.8);
+    assert.equal(summary.stacks.find((s) => s.stack === 'mobile').pct, 0.1);
+    // weighted: (80 + 90) / (100 + 900) = 0.17 -- a naive average of the two percentages
+    // would be (0.8 + 0.1) / 2 = 0.45, which this must NOT match.
+    assert.equal(summary.aggregate.pct, 170 / 1000);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs fails closed when a target command fails, and separately when its declared report is missing', () => {
+  const root = makeProject('coverage-targets-failure');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'enforce', min: 0,
+        targets: [
+          { id: 'crashes', cwd: 'apps/backend', command: 'node -e "process.exit(1)"', summary: 'coverage/coverage-summary.json' },
+          { id: 'no-report', cwd: 'apps/backend', command: 'node -e "0"', summary: 'coverage/does-not-exist.json' },
+        ],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(result.status, 0);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks.find((s) => s.stack === 'crashes').status, 'error');
+    assert.equal(summary.stacks.find((s) => s.stack === 'no-report').status, 'error');
+    assert.equal(summary.passed, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs rejects a target path that escapes the repository root', () => {
+  const root = makeProject('coverage-targets-traversal');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [{ id: 'escape', cwd: '../../outside', command: 'node -e "0"', summary: 'coverage/coverage-summary.json' }],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /escapes the repository root/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs --stack selects exactly one configured target, running and reporting only that one', () => {
+  const root = makeProject('coverage-targets-select-one');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    mkdirSync(join(root, 'apps/mobile'), { recursive: true });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 10, covered: 10 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+          { id: 'mobile', cwd: 'apps/mobile', command: 'node -e "process.exit(1)"', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json', '--stack', 'backend']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks.length, 1);
+    assert.equal(summary.stacks[0].stack, 'backend');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs preserves single-root auto-detection when coverage.targets is absent', () => {
+  const root = makeProject('coverage-targets-absent-backward-compat');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, 'needs_setup');
+    assert.equal(summary.stacks[0].stack, 'node-vitest');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate.mjs enforces coverage.min only when coverage.mode is enforce, and stays backward-compatible when the key is absent', () => {
   const root = makeProject('coverage-validate');
   try {
@@ -674,6 +902,103 @@ test('validate.mjs enforces coverage.min only when coverage.mode is enforce, and
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ stories: [doneStory] }));
     const noConfig = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.equal(noConfig.status, 0, noConfig.stderr || noConfig.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects an invalid coverage.mode and a non-numeric or out-of-range coverage.min', () => {
+  const root = makeProject('coverage-contract-mode-min');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforcee', min: 0.7 } }));
+    const badMode = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badMode.status, 0);
+    assert.match(badMode.stderr, /coverage\.mode must be one of off\|warn\|enforce/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 'high' } }));
+    const nonNumericMin = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(nonNumericMin.status, 0);
+    assert.match(nonNumericMin.stderr, /coverage\.min must be a finite number from 0 through 1/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 1.5 } }));
+    const tooHigh = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(tooHigh.status, 0);
+    assert.match(tooHigh.stderr, /coverage\.min must be a finite number from 0 through 1/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: -0.1 } }));
+    const negative = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(negative.status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects a non-object coverage value, an empty coverage.command, and non-string coverage.stacks entries', () => {
+  const root = makeProject('coverage-contract-shape');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: 'enforce' }));
+    const notObject = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(notObject.status, 0);
+    assert.match(notObject.stderr, /coverage must be an object/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { command: '   ' } }));
+    const blankCommand = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(blankCommand.status, 0);
+    assert.match(blankCommand.stderr, /coverage\.command must be a non-empty string/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { stacks: ['node-vitest', ''] } }));
+    const blankStack = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(blankStack.status, 0);
+    assert.match(blankStack.stderr, /coverage\.stacks must be an array of non-empty strings/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects malformed coverage.targets entries: missing fields and duplicate ids', () => {
+  const root = makeProject('coverage-contract-targets');
+  try {
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { mode: 'warn', targets: [{ id: 'backend', cwd: 'apps/backend' }] },
+    }));
+    const missingFields = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(missingFields.status, 0);
+    assert.match(missingFields.stderr, /coverage\.targets\[0\]\.command is required/);
+    assert.match(missingFields.stderr, /coverage\.targets\[0\]\.summary is required/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'warn',
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'pnpm test', summary: 'coverage/coverage-summary.json' },
+          { id: 'backend', cwd: 'apps/mobile', command: 'pnpm test', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+    }));
+    const dup = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(dup.status, 0);
+    assert.match(dup.stderr, /coverage\.targets\[1\]\.id "backend" is duplicated/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs still rejects an invalid coverage.mode even when legacyContractGrace is active', () => {
+  const root = makeProject('coverage-contract-grace-override');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'nope' } }));
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0, 'legacyContractGrace only softens prd_ref/acceptance/done-verify gaps, never coverage-contract shape');
+    assert.match(result.stderr, /coverage\.mode must be one of/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -719,6 +1044,44 @@ test('build-dashboard.mjs renders the needs_setup nudge and a passing coverage s
     const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
     assert.match(html, /82\.4%/);
     assert.match(html, /coverage\/lcov\.info/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs never invents a lowercase v1 when release_in_flight is missing but epics declare explicit releases', () => {
+  const root = makeProject('dashboard-no-invented-v1');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'V2 work', order: 0, release: 'v2', prd_ref: 'REQ-01' }],
+      stories: [{ id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'It renders.', blocked_by: [], status: 'notstarted', order: 0 }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /Epics &middot; v2/, 'must select the actual declared release, not an invented v1');
+    assert.doesNotMatch(html, /Epics &middot; v1/);
+    assert.match(html, /Config warning/);
+    assert.match(html, /release_in_flight is not set/);
+    assert.match(html, /1 of 1 stories done|0 of 1 stories done/, 'the 1/1-scoped-to-v2 story must be counted, not a false 0/0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('build-dashboard.mjs keeps implicit v1 when no epic declares an explicit release and release_in_flight is absent', () => {
+  const root = makeProject('dashboard-implicit-v1-unchanged');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/build-dashboard.mjs'));
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const html = readFileSync(join(root, 'PROGRESS_DASHBOARD.html'), 'utf8');
+    assert.match(html, /Epics &middot; v1/);
+    assert.doesNotMatch(html, /Config warning/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -851,6 +1214,101 @@ test('sync-plugin.mjs never overwrites a locally-edited scaffold file without --
     const pluginPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
     assert.equal(versionAfter.version, pluginPkg.version, 'once every flagged file is resolved, the stamp should claim the current version');
     assert.deepEqual(versionAfter.pendingReview, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs seeds .github/workflows/throughline.yml rendered for the detected lockfile, then never overwrites a customized copy but still reports that it differs from the current render', () => {
+  const root = makeProject('sync-ci-seed-only');
+  try {
+    // The real bootstrap-project skill no longer wholesale-copies .github/ -- this file is
+    // seeded exclusively by sync-plugin.mjs --apply. Simulate that starting state.
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeJson(join(root, 'package-lock.json'), { name: 'fixture' });
+
+    const seeded = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+    const rendered = readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8');
+    assert.match(rendered, /npm ci/);
+    assert.match(rendered, /permissions:\n\s*contents: read/);
+    assert.doesNotMatch(rendered, /\|\| true/);
+    assert.match(seeded.stdout, /seeded: \.github\/workflows\/throughline\.yml/);
+
+    const unchangedResync = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(unchangedResync.status, 0, unchangedResync.stderr || unchangedResync.stdout);
+    assert.doesNotMatch(unchangedResync.stdout, /needs review/);
+    assert.match(unchangedResync.stdout, /seed-only, up to date: \.github\/workflows\/throughline\.yml/);
+
+    writeFileSync(join(root, '.github/workflows/throughline.yml'), rendered + '\n# project-specific: also run e2e\n', 'utf8');
+    const resynced = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(resynced.status, 0, resynced.stderr || resynced.stdout);
+    assert.doesNotMatch(resynced.stdout, /needs review/);
+    assert.match(resynced.stdout, /differs from current render/);
+    assert.match(readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8'), /project-specific: also run e2e/);
+
+    const version = JSON.parse(readFileSync(join(root, '.throughline/plugin-version.json'), 'utf8'));
+    assert.ok(!version.pendingReview.includes('.github/workflows/throughline.yml'));
+    const pluginPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+    assert.equal(version.version, pluginPkg.version, 'a project-owned CI file must never block the version stamp');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs renders pnpm install steps when pnpm-lock.yaml is present, and defers seeding entirely when there is no package.json at all', () => {
+  const root = makeProject('sync-ci-lockfile-variants');
+  try {
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0\n', 'utf8');
+
+    const pnpmRun = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(pnpmRun.status, 0, pnpmRun.stderr || pnpmRun.stdout);
+    const pnpmYaml = readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8');
+    assert.match(pnpmYaml, /pnpm\/action-setup/);
+    assert.match(pnpmYaml, /pnpm install --frozen-lockfile/);
+
+    rmSync(join(root, 'pnpm-lock.yaml'));
+    rmSync(join(root, '.github/workflows/throughline.yml'));
+    const noLockfileRun = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(noLockfileRun.status, 0, noLockfileRun.stderr || noLockfileRun.stdout);
+    assert.equal(existsSync(join(root, '.github/workflows/throughline.yml')), false);
+    assert.match(noLockfileRun.stdout, /deferred.*\.github\/workflows\/throughline\.yml/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs emits an explicit failing install step when package.json exists but no lockfile is committed', () => {
+  const root = makeProject('sync-ci-package-json-no-lockfile');
+  try {
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeJson(join(root, 'package.json'), { name: 'fixture' });
+
+    const result = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const yaml = readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8');
+    assert.doesNotMatch(yaml, /\|\| true/);
+    assert.match(yaml, /No supported lockfile/);
+    assert.match(yaml, /exit 1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs --force on the seed-only CI workflow is a no-op with an explicit notice, never a silent skip or an overwrite', () => {
+  const root = makeProject('sync-ci-force-noop');
+  try {
+    rmSync(join(root, '.github/workflows/throughline.yml'), { force: true });
+    writeJson(join(root, 'package-lock.json'), { name: 'fixture' });
+    const seeded = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+
+    writeFileSync(join(root, '.github/workflows/throughline.yml'), '# hand-customized, deliberately not matching the render\n', 'utf8');
+    const forced = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--force=.github/workflows/throughline.yml']);
+    assert.equal(forced.status, 0, forced.stderr || forced.stdout);
+    assert.match(forced.stdout, /ignored: \.github\/workflows\/throughline\.yml is seed-only/);
+    assert.match(readFileSync(join(root, '.github/workflows/throughline.yml'), 'utf8'), /hand-customized/, '--force must never touch a seed-only file');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1044,6 +1502,31 @@ test('ensure-branch.mjs --name always lands on that exact branch: create, switch
     assert.equal(switched.status, 0, switched.stderr || switched.stdout);
     assert.match(switched.stdout, /^Switched to epic\/E-1-thing/m);
     assert.equal(currentBranch(root), 'epic/E-1-thing');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ensure-branch.mjs rejects --name=main and --name=master without switching branches, from any starting state', () => {
+  const root = makeProject('ensure-branch-protected-name');
+  try {
+    initGitWithCommit(root);
+    assert.equal(spawnSync('git', ['checkout', '-qb', 'some/work'], { cwd: root, encoding: 'utf8' }).status, 0);
+
+    const rejectMain = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=main']);
+    assert.notEqual(rejectMain.status, 0);
+    assert.match(rejectMain.stderr, /protected branch/);
+    assert.equal(currentBranch(root), 'some/work', '--name=main must never switch the working tree');
+
+    const rejectMaster = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=master']);
+    assert.notEqual(rejectMaster.status, 0);
+    assert.equal(currentBranch(root), 'some/work');
+
+    // Already sitting directly on main and asked to "confirm" --name=main: still rejected,
+    // never treated as a no-op affirmation of being on a protected branch.
+    assert.equal(spawnSync('git', ['checkout', '-q', 'main'], { cwd: root, encoding: 'utf8' }).status, 0);
+    const rejectFromMain = runNode(root, join(root, 'scripts/ensure-branch.mjs'), ['--skill=implement-epic', '--name=main']);
+    assert.notEqual(rejectFromMain.status, 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

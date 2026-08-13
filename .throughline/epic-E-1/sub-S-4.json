@@ -1,0 +1,23 @@
+{
+  "id": "S-4",
+  "title": "CI workflow is seed-only, project-owned, and lockfile-rendered",
+  "goal": "Generate .github/workflows/throughline.yml from the target repo's detected lockfile, stop it from suppressing real failures, and make sync-plugin.mjs treat it as project-owned scaffold instead of a diffed managed file.",
+  "in_scope": [
+    "New skills/bootstrap-project/assets/scripts/lib/render-workflow.mjs: detectLockfile(root) (pnpm/npm/yarn/package-json-no-lockfile/no-node) + renderWorkflow(root)",
+    "Rendered workflow: permissions: contents: read; no || true anywhere; install step matches detected lockfile; hard-fails (no suppression) when package.json exists with no lockfile",
+    "sync-plugin.mjs: remove .github/workflows/throughline.yml from FILES; add scripts/lib/render-workflow.mjs to FILES; add a SEED_ONLY_FILES loop that seeds when missing (deferring when detectLockfile is no-node), and when already present only reads it back to report up-to-date vs differs-from-current-render -- never writes over an existing copy",
+    "--force on a seed-only file prints an explicit ignored: notice instead of silently no-op'ing",
+    "Delete skills/bootstrap-project/assets/.github/workflows/throughline.yml (now stale as a static copy)",
+    "Update bootstrap-project/adopt-project/upgrade-project SKILL.md prose to match (step 2 no longer copies .github/; upgrade-project notes the self-bootstrapping lag and that release_in_flight is a new hard failure)"
+  ],
+  "out_of_scope": [
+    "The 'Synchronizer alternative' (--accept reviewed-override mechanism) -- explicitly not built; seed-only is the adopted design per the PRD's non-goals",
+    "Any change to how other managed files (workflow.md, validate.mjs, etc.) are diffed/flagged"
+  ],
+  "acceptance": "The rendered workflow includes permissions: contents: read and contains no || true; a customized or pre-0.3.2 copy is never overwritten and never enters pendingReview but is reported as differing from the current render; a repo with no package.json at all defers seeding instead of baking in a workflow with no install step.",
+  "invariants": [
+    "A greenfield bootstrap with no package.json yet must never seed a coverage job with no install step baked in permanently",
+    "sync-plugin.mjs's version stamp (plugin-version.json) must never be blocked by a seed-only file"
+  ],
+  "prd_ref": "REQ-04"
+}

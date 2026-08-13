@@ -1,0 +1,19 @@
+{
+  "id": "S-5",
+  "title": "release_in_flight required once epics declare explicit releases; no invented v1",
+  "goal": "Stop build-dashboard.mjs from inventing a false lowercase v1 release when release_in_flight is missing but epics declare explicit releases, and have validate.mjs catch the missing field as a hard error.",
+  "in_scope": [
+    "validate.mjs: require release_in_flight (hard error) once any epic declares an explicit release; keep the existing mismatch check when release_in_flight is present",
+    "build-dashboard.mjs: when release_in_flight is absent but epics declare explicit releases, select a real declared release (prefer one that isn't fully done) and render a visible config-warning banner instead of falling back to 'v1'",
+    "Preserve implicit v1 exactly as today when no epic declares an explicit release and release_in_flight is absent"
+  ],
+  "out_of_scope": [
+    "Any change to how release_in_flight is advanced (still owned exclusively by define-backlog)"
+  ],
+  "acceptance": "An epic with an explicit release and no matching release_in_flight fails validate.mjs; build-dashboard.mjs selects an actual declared release and shows a visible configuration warning instead of a false 0/0 on-track dashboard.",
+  "invariants": [
+    "This new validate.mjs check is a hard error, never softened by legacyContractGrace",
+    "A backlog.json with zero epics, or all-implicit-v1 epics, is unaffected"
+  ],
+  "prd_ref": "REQ-05"
+}

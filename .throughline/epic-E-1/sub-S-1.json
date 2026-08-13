@@ -1,0 +1,20 @@
+{
+  "id": "S-1",
+  "title": "validate.mjs enforces the full coverage contract's shape",
+  "goal": "Make validate.mjs and backlog.schema.json reject any malformed coverage object, unconditionally.",
+  "in_scope": [
+    "Add coverage.targets to backlog.schema.json's coverage property (id/cwd/command/summary required, lcov optional, additionalProperties: false)",
+    "Add a validateCoverage(coverage) function to validate.mjs checking: coverage is an object; mode is one of off|warn|enforce; min is a finite number 0..1; command is a non-empty string when present; stacks is an array of non-empty strings; targets is an array of well-formed, uniquely-id'd objects",
+    "Call validateCoverage(data.coverage) unconditionally (never gated behind legacyContractGrace)"
+  ],
+  "out_of_scope": [
+    "Any change to coverage.mjs's runtime behavior (that is S-2/S-3)",
+    "Any change to the existing done-story coverage.min enforcement block in validate.mjs (unchanged)"
+  ],
+  "acceptance": "Invalid coverage.mode, out-of-range coverage.min, blank coverage.command, non-string coverage.stacks entries, and malformed coverage.targets entries (missing fields, duplicate ids) all fail validate.mjs with a specific error, even when legacyContractGrace is active.",
+  "invariants": [
+    "A backlog.json with no coverage key at all must still pass (backward compatible)",
+    "A valid { min, mode } shape with no targets must still pass unchanged"
+  ],
+  "prd_ref": "REQ-01"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "S-3",
+  "title": "coverage.mjs supports explicit monorepo coverage.targets",
+  "goal": "Let a monorepo declare explicit per-workspace coverage targets that coverage.mjs runs and aggregates correctly, instead of only auto-detecting a single root-level stack.",
+  "in_scope": [
+    "resolveWithinRoot(relPath, label): resolve cwd/summary/lcov relative to root, exit 2 on path traversal outside the repo",
+    "targetStack(t): build a stack descriptor per target (resolvable/run/report/reportFormat/reportPath), exit 2 on a malformed target entry",
+    "Wire coverage.targets into ALL_STACKS ahead of the coverage.command and auto-detect fallbacks, preserving both when targets is absent",
+    "Confirm --stack (from S-2) can select exactly one target by id",
+    "No change needed to the aggregate math (coveredSum/totalSum is already weighted) -- this story only needs a regression test proving it"
+  ],
+  "out_of_scope": [
+    "Any new coverage-tool backend beyond istanbul-style json-summary reading (already supported)",
+    "coverage.mjs --setup support for targets (not required by the spec; YAGNI)"
+  ],
+  "acceptance": "Two workspace targets with different report sizes run and aggregate by weighted covered/measurable lines, not an unweighted average; a failing target command or missing declared report fails closed; target paths cannot escape the repository root; --stack can select exactly one target; single-root auto-detection is unchanged when coverage.targets is absent.",
+  "invariants": [
+    "Every configured target runs and is recorded in .throughline/coverage/summary.json unless --stack narrows to one",
+    "A target's cwd is used as the working directory for its command (not the repo root)"
+  ],
+  "prd_ref": "REQ-03"
+}

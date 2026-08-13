@@ -1,0 +1,21 @@
+{
+  "id": "S-2",
+  "title": "coverage.mjs fails safely on malformed mode/min/threshold/--stack",
+  "goal": "Make coverage.mjs exit 2 on malformed runtime configuration instead of silently behaving as if coverage were off.",
+  "in_scope": [
+    "Validate coverage.mode against off|warn|enforce; exit 2 with a message if invalid (including when the raw value is undefined-but-present-as-something-else, e.g. a typo)",
+    "Validate coverage.min (when present) is a finite number in [0,1]; exit 2 otherwise",
+    "Validate --threshold (when passed) is a finite number in [0,1]; exit 2 otherwise, including non-numeric strings like 'nope'",
+    "After stack selection, validate that an explicitly-passed --stack matches a known stack/target id; exit 2 otherwise"
+  ],
+  "out_of_scope": [
+    "coverage.targets support itself (that is S-3, which builds on this story's guards)",
+    "Any change to the coverage.stacks allowlist's existing silent-filter behavior (unchanged, not explicitly required by the spec)"
+  ],
+  "acceptance": "An unknown coverage.mode, a non-numeric/out-of-range coverage.min, an invalid --threshold, or an unknown --stack all exit 2 with a clear message; only correctly-spelled off/warn bypass threshold enforcement.",
+  "invariants": [
+    "A typo'd mode must never reach the bottom-of-script 'resolvedMode !== enforce -> exit 0' logic",
+    "Existing bare-scaffold / needs_setup / --setup / --story / coverage.command end-to-end tests must keep passing unchanged"
+  ],
+  "prd_ref": "REQ-02"
+}
