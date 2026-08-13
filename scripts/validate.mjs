@@ -102,11 +102,20 @@ validateCoverage(data.coverage);
 
 if (!Array.isArray(data.epics)) err('epics must be an array');
 if (!Array.isArray(data.stories)) err('stories must be an array');
-if ((data.stories || []).length) {
+let prdApproved = false;
+let prdRequirements = new Map();
+if ((data.epics || []).length || (data.stories || []).length) {
   try {
     const prd = readFileSync(join(root, data.prd), 'utf8');
     const status = prd.match(/^status:\s*([a-z_-]+)/m)?.[1];
-    if (status !== 'approved') err('PRD must be approved before backlog contains stories');
+    prdApproved = status === 'approved';
+    if ((data.stories || []).length && !prdApproved) err('PRD must be approved before backlog contains stories');
+    if (prdApproved) {
+      prdRequirements = new Map(prd.split(/\r?\n/).flatMap((line) => {
+        const row = line.match(/^\|\s*(REQ-[0-9]+)\s*\|.*\|\s*([^|\s]+)\s*\|\s*$/);
+        return row ? [[row[1], row[2]]] : [];
+      }));
+    }
   } catch (e) {
     err('cannot read PRD at ' + data.prd + ': ' + e.message);
   }
@@ -121,7 +130,10 @@ const epicIds = new Set();
   if (!e.title) err(at + ': title is required');
   if (typeof e.order !== 'number') err(at + ': order must be a number');
   const refs = Array.isArray(e.prd_ref) ? e.prd_ref : e.prd_ref ? [e.prd_ref] : [];
-  refs.forEach((r) => { if (!REQ_RE.test(r)) err(at + ": prd_ref '" + r + "' must match " + REQ_RE); });
+  refs.forEach((r) => {
+    if (!REQ_RE.test(r)) err(at + ": prd_ref '" + r + "' must match " + REQ_RE);
+    else if (prdApproved && !prdRequirements.has(r)) err(at + ": prd_ref '" + r + "' does not exist in the approved PRD");
+  });
   if (e.phase && phaseIds.size && !phaseIds.has(e.phase)) err(at + ": phase '" + e.phase + "' not declared in phases[]");
 });
 const ids = new Set();
@@ -135,7 +147,10 @@ const ids = new Set();
   else if (epicIds.size && !epicIds.has(s.epic)) err(at + ": epic '" + s.epic + "' is not declared in epics[]");
   const prdRefs = Array.isArray(s.prd_ref) ? s.prd_ref : s.prd_ref ? [s.prd_ref] : [];
   if (!prdRefs.length) { const msg = at + ': prd_ref is required'; legacyContractGrace ? warn(msg) : err(msg); }
-  else prdRefs.forEach((r) => { if (!REQ_RE.test(r)) err(at + ": prd_ref '" + r + "' must match " + REQ_RE); });
+  else prdRefs.forEach((r) => {
+    if (!REQ_RE.test(r)) err(at + ": prd_ref '" + r + "' must match " + REQ_RE);
+    else if (prdApproved && !prdRequirements.has(r)) err(at + ": prd_ref '" + r + "' does not exist in the approved PRD");
+  });
   if (!s.acceptance || !String(s.acceptance).trim()) { const msg = at + ': acceptance is required'; legacyContractGrace ? warn(msg) : err(msg); }
   if (!STATUS.includes(s.status)) err(at + ': status must be one of ' + STATUS.join('|'));
   if (typeof s.order !== 'number') err(at + ': order must be a number');
@@ -148,6 +163,24 @@ const ids = new Set();
     else if (s.verify.coverage < min) err(at + ': verify.coverage ' + s.verify.coverage + ' is below coverage.min ' + min);
   }
 });
+if (prdApproved && ((data.epics || []).length || (data.stories || []).length)) {
+  for (const [requirementId, release] of prdRequirements) {
+    const releaseEpics = (data.epics || []).filter((epic) => {
+      const refs = Array.isArray(epic.prd_ref) ? epic.prd_ref : epic.prd_ref ? [epic.prd_ref] : [];
+      return (epic.release || 'v1') === release && refs.includes(requirementId);
+    });
+    if (!releaseEpics.length) {
+      err(requirementId + ' (release ' + release + ') is not referenced by any epic in release ' + release);
+      continue;
+    }
+    const releaseEpicIds = new Set(releaseEpics.map((epic) => epic.id));
+    const coveredByStory = (data.stories || []).some((story) => {
+      const refs = Array.isArray(story.prd_ref) ? story.prd_ref : story.prd_ref ? [story.prd_ref] : [];
+      return releaseEpicIds.has(story.epic) && refs.includes(requirementId);
+    });
+    if (!coveredByStory) err(requirementId + ' (release ' + release + ') is not referenced by any story in its release epic(s)');
+  }
+}
 const storyById = new Map((data.stories || []).map((s) => [s.id, s]));
 (data.stories || []).forEach((s) => {
   const deps = Array.isArray(s.blocked_by) ? s.blocked_by : [];

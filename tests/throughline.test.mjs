@@ -33,8 +33,18 @@ function writeJson(path, value) {
 
 function approvePrd(root) {
   const prdPath = join(root, 'docs/product/06-prd.md');
-  const prd = readFileSync(prdPath, 'utf8').replace('status: draft', 'status: approved');
+  const prd = readFileSync(prdPath, 'utf8')
+    .replace('status: draft', 'status: approved')
+    .replace('| REQ-01 | … | P0 | … | v1 |', '| REQ-01 | Build the fixture | P0 | The fixture works | v1 |')
+    .replace('| REQ-02 | … | P1 | … | v1 |\n', '');
   writeFileSync(prdPath, prd, 'utf8');
+}
+
+function writeApprovedPrd(root, requirements) {
+  const rows = requirements
+    .map(({ id, release }) => `| ${id} | Requirement ${id} | P0 | ${id} works | ${release} |`)
+    .join('\n');
+  writeFileSync(join(root, 'docs/product/06-prd.md'), `---\ndoc: prd\nproject: Fixture\nstatus: approved\n---\n\n## Requirements\n\n| ID | Requirement | Priority | Acceptance | Release |\n|---|---|---|---|---|\n${rows}\n`, 'utf8');
 }
 
 function baseBacklog(overrides = {}) {
@@ -332,6 +342,89 @@ test('gate script scopes approval to a subject so a stale global approval from o
 
     const list = runNode(root, gateScript, ['list']);
     assert.match(list.stdout, /G6: approved \(E-1: approved, E-3: approved\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects an epic prd_ref absent from the approved PRD', () => {
+  const root = makeProject('dangling-epic-prd-ref');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-999' }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /epics\[0\] E-1: prd_ref 'REQ-999' does not exist in the approved PRD/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects a story prd_ref absent from the approved PRD', () => {
+  const root = makeProject('dangling-story-prd-ref');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{
+        id: 'S-1', title: 'Invented requirement', epic: 'E-1', prd_ref: 'REQ-999',
+        acceptance: 'The invented requirement appears complete.', blocked_by: [], status: 'notstarted', order: 0,
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /stories\[0\] S-1: prd_ref 'REQ-999' does not exist in the approved PRD/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs requires every release requirement in a same-release epic and story', () => {
+  const root = makeProject('prd-release-traceability');
+  try {
+    writeApprovedPrd(root, [
+      { id: 'REQ-01', release: 'v1' },
+      { id: 'REQ-02', release: 'v2' },
+    ]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v1' }));
+
+    const missingEpic = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(missingEpic.status, 0);
+    assert.match(missingEpic.stderr, /REQ-02 \(release v2\) is not referenced by any epic in release v2/);
+
+    const epics = [
+      { id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' },
+      { id: 'E-2', title: 'Second release', order: 1, prd_ref: 'REQ-02', release: 'v2' },
+    ];
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        ...baseBacklog().stories,
+        { id: 'S-2', title: 'Wrong release trace', epic: 'E-2', prd_ref: 'REQ-01', acceptance: 'The work ships.', blocked_by: [], status: 'notstarted', order: 1 },
+      ],
+    }));
+
+    const missingStory = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(missingStory.status, 0);
+    assert.match(missingStory.stderr, /REQ-02 \(release v2\) is not referenced by any story in its release epic/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        ...baseBacklog().stories,
+        { id: 'S-2', title: 'Second release trace', epic: 'E-2', prd_ref: 'REQ-02', acceptance: 'The work ships.', blocked_by: [], status: 'notstarted', order: 1 },
+      ],
+    }));
+
+    const complete = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(complete.status, 0, complete.stderr || complete.stdout);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
