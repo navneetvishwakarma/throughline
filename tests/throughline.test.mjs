@@ -36,7 +36,7 @@ function approvePrd(root) {
   const prd = readFileSync(prdPath, 'utf8')
     .replace('status: draft', 'status: approved')
     .replace('| REQ-01 | … | P0 | … | v1 |', '| REQ-01 | Build the fixture | P0 | The fixture works | v1 |')
-    .replace('| REQ-02 | … | P1 | … | v1 |\n', '');
+    .replace(/^\| REQ-02 \| … \| P1 \| … \| v1 \|\r?\n/m, '');
   writeFileSync(prdPath, prd, 'utf8');
 }
 
@@ -471,13 +471,14 @@ test('gate script recognizes G9 (measure-learn) alongside the existing gates', (
 test('validate.mjs checks release_in_flight against epics[].release', () => {
   const root = makeProject('release-in-flight');
   try {
-    approvePrd(root);
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
 
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v2' }));
     const mismatch = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.notEqual(mismatch.status, 0);
     assert.match(mismatch.stderr, /release_in_flight/);
 
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v2' }]);
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
       release_in_flight: 'v2',
       epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v2' }],
