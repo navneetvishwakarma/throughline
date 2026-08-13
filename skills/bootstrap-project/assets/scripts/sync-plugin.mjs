@@ -240,8 +240,10 @@ if (apply && existsSync(join(root, '.git')) && existsSync(join(root, '.githooks/
   const hookSrc = join(root, '.githooks/pre-commit');
   const liveHook = readSafe(hookDest);
   const currentHook = readSafe(hookSrc);
-  const managedHook = /^\s*node scripts\/ensure-branch\.mjs --check-only\s*$/m.test(liveHook || '')
-    && /^\s*node scripts\/validate\.mjs\s*$/m.test(liveHook || '');
+  const historicalManagedHooks = new Set([
+    '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n',
+  ]);
+  const managedHook = liveHook === currentHook || historicalManagedHooks.has(liveHook);
   if (liveHook == null) {
     mkdirSync(dirname(hookDest), { recursive: true });
     copyFileSync(hookSrc, hookDest);

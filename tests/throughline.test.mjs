@@ -1713,6 +1713,25 @@ test('sync-plugin.mjs preserves a partial Throughline-like hook as project-owned
   }
 });
 
+test('sync-plugin.mjs preserves a project hook composed with both Throughline checks', () => {
+  const root = makeProject('sync-composed-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const composedHook = '#!/bin/sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\nnpm run lint\n';
+    writeFileSync(hookPath, composedHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), composedHook, 'a composed project hook must remain byte-identical');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('sync-plugin.mjs does not claim a hook containing only commented Throughline commands', () => {
   const root = makeProject('sync-commented-hook');
   try {
