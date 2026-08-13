@@ -7,8 +7,8 @@
     },
     "G2": {
       "status": "approved",
-      "note": "PRD approved: REQ-01..REQ-07",
-      "updatedAt": "2026-08-12T16:24:32.742Z"
+      "note": "REQ-08..REQ-16 retroactive backfill approved (0.1.0-0.3.1 baseline documented)",
+      "updatedAt": "2026-08-13T07:44:16.548Z"
     },
     "G5": {
       "status": "approved",
@@ -29,13 +29,18 @@
     },
     "G7": {
       "status": "approved",
-      "note": "local epic merge approved",
-      "updatedAt": "2026-08-13T00:13:32.423Z",
+      "note": "local feature merge approved",
+      "updatedAt": "2026-08-13T07:51:54.592Z",
       "subjects": {
         "E-1": {
           "status": "approved",
           "note": "local epic merge approved",
           "updatedAt": "2026-08-13T00:13:32.423Z"
+        },
+        "win-coverage-fix-and-prd-backfill": {
+          "status": "approved",
+          "note": "local feature merge approved",
+          "updatedAt": "2026-08-13T07:51:54.592Z"
         }
       }
     }
