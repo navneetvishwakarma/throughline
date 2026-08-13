@@ -63,26 +63,38 @@ const prdIds = new Set();
 function parsePrd() {
   const path = join(root, 'docs/product/06-prd.md');
   const text = readSafe(path);
-  if (text == null) return { text: null, rows: [] };
-  const rows = text.split(/\r?\n/).filter((l) => l.trim().startsWith('|') && !/^\|[\s-]+\|/.test(l.trim()));
-  let sawHeader = false;
+  if (text == null) return { text: null, rows: [], malformedIds: [] };
+  const rows = [];
+  let inRequirements = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^##\s+Requirements\s*$/i.test(line.trim())) {
+      inRequirements = true;
+      continue;
+    }
+    if (inRequirements && /^##\s+/.test(line.trim())) break;
+    if (inRequirements && line.trim().startsWith('|')) rows.push(line);
+  }
   const parsed = [];
+  const malformedIds = [];
   for (const row of rows) {
     const cells = row.split('|').slice(1, -1).map((c) => c.trim());
-    if (!sawHeader) { sawHeader = true; continue; }
     if (!cells.length || !cells[0]) continue;
     const [id, , priority, acceptance, release] = cells;
+    if (/^ID$/i.test(id) || cells.every((cell) => /^:?-+:?$/.test(cell))) continue;
+    if (id.startsWith('REQ-') && !REQ_RE.test(id)) malformedIds.push(id);
     if (!REQ_RE.test(id)) continue; // not a requirement row (e.g. a stray table elsewhere)
     prdIds.add(id);
     parsed.push({ id, priority, acceptance, release });
   }
-  return { text, rows: parsed };
+  return { text, rows: parsed, malformedIds };
 }
 function checkPrd() {
-  const { text, rows } = parsePrd();
+  const { text, rows, malformedIds } = parsePrd();
   if (text == null) return;
   const fm = frontmatter(text);
   if (!['draft', 'approved'].includes(fm.status)) err('06-prd.md: status must be draft|approved (got ' + JSON.stringify(fm.status) + ')');
+  if (!rows.length) err('06-prd.md: Requirements table must contain at least one valid REQ-xx row');
+  for (const id of malformedIds) err("06-prd.md: malformed requirement id '" + id + "' must match " + REQ_RE);
   const seen = new Set();
   for (const { id, priority, acceptance, release } of rows) {
     if (seen.has(id)) err('06-prd.md: duplicate requirement id ' + id);
@@ -136,12 +148,63 @@ function checkDesign() {
 }
 
 // ---- Architecture tier ----
+const ARCHITECTURE_DOCS = [
+  '01-system-overview.md',
+  '02-tech-stack.md',
+  '03-data-model.md',
+  '05-api-design.md',
+  '07-infrastructure.md',
+];
+const PLACEHOLDER_PATTERNS = [
+  /One-line purpose of this document\./i,
+  /_Why this exists\s*\/\s*what problem it addresses\._/i,
+  /_Main content\._/i,
+  /^\s*-\s*\[\s*\]\s*(?:…|\.\.\.)\s*$/m,
+  /#\s*ADR-XXXX\s*:/i,
+  /_The forces at play\s*[—-]\s*what made this decision necessary\._/i,
+  /_What we chose\._/i,
+  /_Trade-offs accepted, follow-ups created, what this rules out\._/i,
+  /^\s*-\s*\*\*Option [AB]\*\*\s*[—-]\s*why not\.\s*$/im,
+];
+
+function hasPlaceholder(text) {
+  return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function personasApplied(text) {
+  const value = text.match(/^\s*\*\*Personas Applied:\*\*\s*(.+)$/im)?.[1] || '';
+  const personas = value.split(',').map((persona) => persona.trim().toLowerCase());
+  return personas.includes('architect') && personas.includes('security');
+}
+
+function substantiveThreatModel(text, sectionOnly) {
+  let body = text;
+  if (sectionOnly) {
+    const match = text.match(/^##\s+Security threat model\s*$/im);
+    if (!match) return false;
+    body = text.slice(match.index + match[0].length).split(/^##\s+/m)[0];
+  }
+  body = body
+    .replace(/^---\r?\n[\s\S]*?\r?\n---/, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^#{1,6}\s+.*$/gm, '')
+    .replace(/^\s*\*\*Personas Applied:\*\*.*$/gim, '');
+  return !hasPlaceholder(body) && body.replace(/\s/g, '').length >= 40;
+}
+
 function checkArchitecture() {
   const overviewPath = join(root, 'docs/architecture/01-system-overview.md');
   const overview = readSafe(overviewPath);
   if (overview != null) {
     const fm = frontmatter(overview);
     if (!['draft', 'approved'].includes(fm.status)) err('architecture/01-system-overview.md: status must be draft|approved (got ' + JSON.stringify(fm.status) + ')');
+  }
+
+  for (const file of ARCHITECTURE_DOCS) {
+    const text = readSafe(join(root, 'docs/architecture', file));
+    const rel = 'architecture/' + file;
+    if (text == null) err(rel + ': required architecture document is missing');
+    else if (hasPlaceholder(text)) err(rel + ': contains scaffold placeholder content');
   }
 
   const decisionsDir = join(root, 'docs/architecture/decisions');
@@ -152,11 +215,28 @@ function checkArchitecture() {
     const text = readSafe(path);
     const fm = frontmatter(text);
     const rel = 'architecture/decisions/' + path.split(/[\\/]/).pop();
+    if (hasPlaceholder(text)) err(rel + ': contains scaffold placeholder content');
     const supersededMatch = String(fm.status || '').match(/^superseded-by\s+(ADR-[0-9]+)$/);
     if (supersededMatch) {
       if (!knownAdrIds.has(supersededMatch[1])) err(rel + ": status references " + supersededMatch[1] + " which does not exist in decisions/");
     } else if (!['proposed', 'accepted', 'superseded'].includes(fm.status)) {
       err(rel + ": status must be proposed|accepted|superseded|'superseded-by ADR-NNNN' (got " + JSON.stringify(fm.status) + ')');
+    }
+  }
+  const threatPath = join(root, 'docs/architecture/security-threat-model.md');
+  const threat = readSafe(threatPath);
+  if (threat != null && hasPlaceholder(threat)) err('architecture/security-threat-model.md: contains scaffold placeholder content');
+  const candidates = [
+    overview == null ? null : { text: overview, sectionOnly: true },
+    threat == null ? null : { text: threat, sectionOnly: false },
+  ].filter(Boolean);
+  const substantiveCandidates = candidates.filter(({ text, sectionOnly }) => substantiveThreatModel(text, sectionOnly));
+  const validThreatModel = substantiveCandidates.some(({ text }) => personasApplied(text));
+  if (!validThreatModel) {
+    if (!substantiveCandidates.length) {
+      err('architecture: a substantive security threat model is required in 01-system-overview.md or security-threat-model.md');
+    } else {
+      err('architecture: security threat model must record Architect and Security personas');
     }
   }
 }

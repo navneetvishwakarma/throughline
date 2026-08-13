@@ -1,0 +1,26 @@
+{
+  "id": "S-9",
+  "title": "Enforce PRD reference membership and complete V1 release traceability",
+  "goal": "Make release completion provable from real PRD requirements instead of syntactically valid or incomplete references.",
+  "in_scope": [
+    "Parse the approved PRD's real requirement IDs in validate.mjs",
+    "Reject dangling epic and story prd_ref values even when their REQ-xx format is valid",
+    "Reject a release contract when a PRD requirement tagged for that release has no matching backlog reference",
+    "Keep E-2 references complete for REQ-08 through REQ-16"
+  ],
+  "out_of_scope": [
+    "Renumbering or rewriting shipped REQ-01 through REQ-07",
+    "Inferring requirements from source code",
+    "Changing requirement release tags without explicit product approval"
+  ],
+  "acceptance": "validate.mjs rejects epic or story prd_ref values that do not exist in the approved PRD, and rejects a release when any PRD requirement tagged for that release is absent from its backlog contract; every REQ-08 through REQ-16 requirement is referenced by E-2 and at least one E-2 story so V1 rollups cannot report completion while core capabilities are unevaluated.",
+  "invariants": [
+    "The PRD remains the source of truth for requirement identity and release classification",
+    "A release cannot become complete through invented or dangling requirement IDs",
+    "Historical E-1 evidence remains unchanged"
+  ],
+  "prd_ref": [
+    "REQ-09",
+    "REQ-13"
+  ]
+}

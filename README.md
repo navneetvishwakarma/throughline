@@ -52,7 +52,7 @@ None of those integrations are required for local operation.
 
 Requirements:
 
-- Node.js 18+
+- Node.js `^20.19.0 || ^22.12.0 || >=23`
 - Git
 - Claude Code, Codex, Antigravity, or another coding agent that can read project instructions
 

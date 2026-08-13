@@ -33,8 +33,18 @@ function writeJson(path, value) {
 
 function approvePrd(root) {
   const prdPath = join(root, 'docs/product/06-prd.md');
-  const prd = readFileSync(prdPath, 'utf8').replace('status: draft', 'status: approved');
+  const prd = readFileSync(prdPath, 'utf8')
+    .replace('status: draft', 'status: approved')
+    .replace('| REQ-01 | … | P0 | … | v1 |', '| REQ-01 | Build the fixture | P0 | The fixture works | v1 |')
+    .replace(/^\| REQ-02 \| … \| P1 \| … \| v1 \|\r?\n/m, '');
   writeFileSync(prdPath, prd, 'utf8');
+}
+
+function writeApprovedPrd(root, requirements) {
+  const rows = requirements
+    .map(({ id, release }) => `| ${id} | Requirement ${id} | P0 | ${id} works | ${release} |`)
+    .join('\n');
+  writeFileSync(join(root, 'docs/product/06-prd.md'), `---\ndoc: prd\nproject: Fixture\nstatus: approved\n---\n\n## Requirements\n\n| ID | Requirement | Priority | Acceptance | Release |\n|---|---|---|---|---|\n${rows}\n`, 'utf8');
 }
 
 function baseBacklog(overrides = {}) {
@@ -277,22 +287,132 @@ test('sync-status.mjs infers and persists tracker=github when gh_issue data exis
   }
 });
 
+test('sync-status.mjs reopens a done GitHub story without erasing verification evidence', () => {
+  const root = makeProject('sync-status-github-reopen');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    const verify = { ci: 'pass', commit: 'abc123', coverage: 91 };
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'github',
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'done', order: 0,
+        gh_issue: 42, verify,
+      }],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-42.json'), { number: 42, state: 'OPEN' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const [story] = JSON.parse(readFileSync(backlogPath, 'utf8')).stories;
+    assert.equal(story.status, 'in_progress');
+    assert.deepEqual(story.verify, verify);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs blocks every done dependent when an upstream GitHub issue reopens regardless of story order', () => {
+  const root = makeProject('sync-status-github-reopen-chain');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'github',
+      stories: [
+        { id: 'S-3', title: 'Release', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Release works.', blocked_by: ['S-2'], status: 'done', order: 2, gh_issue: 43, verify: { ci: 'pass', commit: 'ccc333' } },
+        { id: 'S-2', title: 'Integrate', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Integration works.', blocked_by: ['S-1'], status: 'done', order: 1, gh_issue: 42, verify: { ci: 'pass', commit: 'bbb222' } },
+        { id: 'S-1', title: 'Foundation', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Foundation works.', blocked_by: [], status: 'done', order: 0, gh_issue: 41, verify: { ci: 'pass', commit: 'aaa111' } },
+      ],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-41.json'), { number: 41, state: 'OPEN' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-42.json'), { number: 42, state: 'CLOSED' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-43.json'), { number: 43, state: 'CLOSED' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const stories = new Map(JSON.parse(readFileSync(backlogPath, 'utf8')).stories.map((story) => [story.id, story]));
+    assert.equal(stories.get('S-1').status, 'in_progress');
+    assert.equal(stories.get('S-2').status, 'blocked');
+    assert.equal(stories.get('S-3').status, 'blocked');
+    assert.deepEqual(stories.get('S-2').verify, { ci: 'pass', commit: 'bbb222' });
+    assert.deepEqual(stories.get('S-3').verify, { ci: 'pass', commit: 'ccc333' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs keeps a closed GitHub story chain done when every dependency is satisfied', () => {
+  const root = makeProject('sync-status-github-closed-chain');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'github',
+      stories: [
+        { id: 'S-2', title: 'Integrate', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Integration works.', blocked_by: ['S-1'], status: 'done', order: 1, gh_issue: 52, verify: { ci: 'pass', commit: 'bbb222' } },
+        { id: 'S-1', title: 'Foundation', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Foundation works.', blocked_by: [], status: 'done', order: 0, gh_issue: 51, verify: { ci: 'pass', commit: 'aaa111' } },
+      ],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-51.json'), { number: 51, state: 'CLOSED' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-52.json'), { number: 52, state: 'CLOSED' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const stories = JSON.parse(readFileSync(backlogPath, 'utf8')).stories;
+    assert.deepEqual(stories.map(({ id, status }) => ({ id, status })), [
+      { id: 'S-2', status: 'done' },
+      { id: 'S-1', status: 'done' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs keeps local tracker ownership and recovers an unblocked story to notstarted', () => {
+  const root = makeProject('sync-status-local-recovery');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    const verify = { ci: 'pass', commit: 'bbb222' };
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'local',
+      stories: [
+        { id: 'S-1', title: 'Foundation', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Foundation works.', blocked_by: [], status: 'done', order: 0, gh_issue: 61 },
+        { id: 'S-2', title: 'Integrate', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Integration works.', blocked_by: ['S-1'], status: 'blocked', order: 1, gh_issue: 62, verify },
+      ],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-61.json'), { number: 61, state: 'OPEN' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-62.json'), { number: 62, state: 'CLOSED' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const stories = new Map(JSON.parse(readFileSync(backlogPath, 'utf8')).stories.map((story) => [story.id, story]));
+    assert.equal(stories.get('S-1').status, 'done');
+    assert.equal(stories.get('S-2').status, 'notstarted');
+    assert.deepEqual(stories.get('S-2').verify, verify);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('gate script persists approval state and blocks missing approvals', () => {
   const root = makeProject('gates');
   try {
     const gateScript = join(root, 'scripts/gate.mjs');
     assert.equal(existsSync(gateScript), true);
 
-    const missing = runNode(root, gateScript, ['check', 'G6']);
+    const missing = runNode(root, gateScript, ['check', 'G5']);
     assert.notEqual(missing.status, 0);
-    assert.match(missing.stderr, /G6 is not approved/);
+    assert.match(missing.stderr, /G5 is not approved/);
 
-    const approve = runNode(root, gateScript, ['approve', 'G6', '--note', 'plan reviewed']);
+    const approve = runNode(root, gateScript, ['approve', 'G5', '--note', 'backlog reviewed']);
     assert.equal(approve.status, 0, approve.stderr || approve.stdout);
 
-    const check = runNode(root, gateScript, ['check', 'G6']);
+    const check = runNode(root, gateScript, ['check', 'G5']);
     assert.equal(check.status, 0, check.stderr || check.stdout);
-    assert.match(check.stdout, /G6 approved/);
+    assert.match(check.stdout, /G5 approved/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -306,11 +426,16 @@ test('gate script scopes approval to a subject so a stale global approval from o
     const approveE1 = runNode(root, gateScript, ['approve', 'G6', '--subject', 'E-1', '--note', 'epic 1 plan approved']);
     assert.equal(approveE1.status, 0, approveE1.stderr || approveE1.stdout);
 
-    // The global bare check is satisfied (legacy behavior preserved)...
-    const bareCheck = runNode(root, gateScript, ['check', 'G6']);
-    assert.equal(bareCheck.status, 0, bareCheck.stderr || bareCheck.stdout);
+    const bareG6Check = runNode(root, gateScript, ['check', 'G6']);
+    assert.notEqual(bareG6Check.status, 0);
+    assert.match(bareG6Check.stderr, /G6.*--subject/);
 
-    // ...but a DIFFERENT epic's subject-scoped check must NOT ride on E-1's approval.
+    const approveG7 = runNode(root, gateScript, ['approve', 'G7', '--subject', 'E-1', '--note', 'epic 1 ready to merge']);
+    assert.equal(approveG7.status, 0, approveG7.stderr || approveG7.stdout);
+    const bareG7Check = runNode(root, gateScript, ['check', 'G7']);
+    assert.notEqual(bareG7Check.status, 0);
+    assert.match(bareG7Check.stderr, /G7.*--subject/);
+
     const checkE3 = runNode(root, gateScript, ['check', 'G6', '--subject', 'E-3']);
     assert.notEqual(checkE3.status, 0);
     assert.match(checkE3.stderr, /not approved for E-3/);
@@ -327,6 +452,149 @@ test('gate script scopes approval to a subject so a stale global approval from o
 
     const list = runNode(root, gateScript, ['list']);
     assert.match(list.stdout, /G6: approved \(E-1: approved, E-3: approved\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects an epic prd_ref absent from the approved PRD', () => {
+  const root = makeProject('dangling-epic-prd-ref');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-999' }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /epics\[0\] E-1: prd_ref 'REQ-999' does not exist in the approved PRD/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs rejects a story prd_ref absent from the approved PRD', () => {
+  const root = makeProject('dangling-story-prd-ref');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      stories: [{
+        id: 'S-1', title: 'Invented requirement', epic: 'E-1', prd_ref: 'REQ-999',
+        acceptance: 'The invented requirement appears complete.', blocked_by: [], status: 'notstarted', order: 0,
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /stories\[0\] S-1: prd_ref 'REQ-999' does not exist in the approved PRD/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs ignores REQ-like rows outside the PRD Requirements section', () => {
+  const root = makeProject('prd-traceability-section-boundary');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    const prdPath = join(root, 'docs/product/06-prd.md');
+    writeFileSync(prdPath, readFileSync(prdPath, 'utf8') + `
+## Appendix
+
+| ID | Note | Priority | Detail | Release |
+|---|---|---|---|---|
+| REQ-99 | Historical identifier | P0 | Not a product requirement | v1 |
+`, 'utf8');
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stderr + result.stdout, /REQ-99/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs reads a requirement release from the final table cell', () => {
+  const root = makeProject('prd-traceability-escaped-pipe');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    const prdPath = join(root, 'docs/product/06-prd.md');
+    writeFileSync(prdPath, readFileSync(prdPath, 'utf8').replace(
+      '| REQ-01 | Requirement REQ-01 | P0 | REQ-01 works | v1 |',
+      '| REQ-01 | Requirement REQ-01 | P0 | Contains no `\\|\\| true` bypass | v1 |',
+    ), 'utf8');
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs requires every release requirement in a same-release epic and story', () => {
+  const root = makeProject('prd-release-traceability');
+  try {
+    writeApprovedPrd(root, [
+      { id: 'REQ-01', release: 'v1' },
+      { id: 'REQ-02', release: 'v2' },
+    ]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v1' }));
+
+    const missingEpic = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(missingEpic.status, 0);
+    assert.match(missingEpic.stderr, /REQ-02 \(release v2\) is not referenced by any epic in release v2/);
+
+    const epics = [
+      { id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' },
+      { id: 'E-2', title: 'Second release', order: 1, prd_ref: 'REQ-02', release: 'v2' },
+    ];
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        ...baseBacklog().stories,
+        { id: 'S-2', title: 'Wrong release trace', epic: 'E-2', prd_ref: 'REQ-01', acceptance: 'The work ships.', blocked_by: [], status: 'notstarted', order: 1 },
+      ],
+    }));
+
+    const missingStory = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(missingStory.status, 0);
+    assert.match(missingStory.stderr, /REQ-02 \(release v2\) is not referenced by any story in its release epic/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        ...baseBacklog().stories,
+        { id: 'S-2', title: 'Second release trace', epic: 'E-2', prd_ref: 'REQ-02', acceptance: 'The work ships.', blocked_by: [], status: 'notstarted', order: 1 },
+      ],
+    }));
+
+    const complete = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(complete.status, 0, complete.stderr || complete.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate script next skips optional G1.5 while keeping it visible in list', () => {
+  const root = makeProject('gate-next-optional');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const approveG1 = runNode(root, gateScript, ['approve', 'G1', '--note', 'brief approved']);
+    assert.equal(approveG1.status, 0, approveG1.stderr || approveG1.stdout);
+
+    const next = runNode(root, gateScript, ['next']);
+    assert.equal(next.status, 0, next.stderr || next.stdout);
+    assert.match(next.stdout, /G2 pending/);
+
+    const list = runNode(root, gateScript, ['list']);
+    assert.match(list.stdout, /G1\.5: pending/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -355,13 +623,14 @@ test('gate script recognizes G9 (measure-learn) alongside the existing gates', (
 test('validate.mjs checks release_in_flight against epics[].release', () => {
   const root = makeProject('release-in-flight');
   try {
-    approvePrd(root);
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
 
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v2' }));
     const mismatch = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.notEqual(mismatch.status, 0);
     assert.match(mismatch.stderr, /release_in_flight/);
 
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v2' }]);
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
       release_in_flight: 'v2',
       epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v2' }],
@@ -473,6 +742,18 @@ test('bootstrap scaffolds a real docs/design/README.md instead of a bare empty d
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('package runtime support matches the bundled c8 toolchain', () => {
+  const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+  const packageLock = JSON.parse(readFileSync(join(repoRoot, 'package-lock.json'), 'utf8'));
+  const c8Range = packageLock.packages['node_modules/c8'].engines.node;
+  const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+
+  assert.equal(c8Range, '^20.19.0 || ^22.12.0 || >=23');
+  assert.equal(packageJson.engines.node, c8Range);
+  assert.equal(packageLock.packages[''].engines.node, c8Range);
+  assert.match(readme, /Node\.js `\^20\.19\.0 \|\| \^22\.12\.0 \|\| >=23`/);
 });
 
 test('doctor validates plugin package and scaffold fixture', () => {
@@ -668,6 +949,70 @@ test('coverage.mjs runs the real run/parse/aggregate/--story chain end to end vi
   }
 });
 
+test('coverage.mjs does not write story evidence from a partial multi-target result', () => {
+  const root = makeProject('coverage-story-partial-targets');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    mkdirSync(join(root, 'apps/mobile'), { recursive: true });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 80 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'enforce', min: 0.7,
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+          { id: 'mobile', cwd: 'apps/mobile', command: 'node -e "process.exit(1)"', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'in_progress', order: 0,
+        verify: { ci: 'pass', commit: 'abc123' },
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--story', 'S-1', '--check']);
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    const story = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8')).stories[0];
+    assert.equal(Object.hasOwn(story.verify, 'coverage'), false, 'partial coverage must not become story evidence');
+    assert.match(result.stderr, /verify\.coverage left untouched.*status=error.*passed=false/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs leaves existing story evidence unchanged when numeric coverage is below threshold', () => {
+  const root = makeProject('coverage-story-below-threshold');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 50 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { mode: 'enforce', min: 0.7, command: 'node write-coverage.mjs' },
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'in_progress', order: 0,
+        verify: { ci: 'pass', commit: 'abc123', coverage: 0.9 },
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--story', 'S-1', '--check']);
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    const story = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8')).stories[0];
+    assert.equal(story.verify.coverage, 0.9, 'failed coverage must not replace existing evidence');
+    assert.match(result.stderr, /verify\.coverage left untouched.*status=ok.*passed=false/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('coverage.mjs exits 2 for an unknown coverage.mode, never treating a typo as off', () => {
   const root = makeProject('coverage-runtime-bad-mode');
   try {
@@ -749,6 +1094,40 @@ test('coverage.mjs exits 2 for an unknown --stack identifier requested explicitl
   }
 });
 
+test('coverage.mjs exits 2 when any configured coverage.stacks identifier is unknown', () => {
+  const root = makeProject('coverage-unknown-configured-stacks');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+    approvePrd(root);
+
+    for (const stacks of [['does-not-exist'], ['node-vitest', 'does-not-exist']]) {
+      writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', stacks } }));
+      const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+      assert.equal(result.status, 2, result.stderr || result.stdout);
+      assert.match(result.stderr, /Unknown coverage\.stacks identifier "does-not-exist"/);
+      assert.match(result.stderr, /Known: node-vitest/);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs exits 2 when configured coverage.stacks selects no detected stack', () => {
+  const root = makeProject('coverage-no-configured-stack-match');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', devDependencies: { vitest: '^2.0.0' } });
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', stacks: [] } }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /coverage\.stacks selected no detected stack/);
+    assert.match(result.stderr, /Known: node-vitest/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('coverage.mjs runs two workspace targets and aggregates by weighted covered/total, not an unweighted average of percentages', () => {
   const root = makeProject('coverage-targets-weighted');
   try {
@@ -785,6 +1164,76 @@ test('coverage.mjs runs two workspace targets and aggregates by weighted covered
     // weighted: (80 + 90) / (100 + 900) = 0.17 -- a naive average of the two percentages
     // would be (0.8 + 0.1) / 2 = 0.45, which this must NOT match.
     assert.equal(summary.aggregate.pct, 170 / 1000);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs rejects a stale custom-command summary when the current command writes no report', () => {
+  const root = makeProject('coverage-custom-stale-report');
+  try {
+    approvePrd(root);
+    writeJson(join(root, 'coverage/coverage-summary.json'), { total: { lines: { total: 100, covered: 100 } } });
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { mode: 'enforce', min: 0.9, command: 'node -e "process.exit(0)"' },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, 'error');
+    assert.match(summary.stacks[0].message, /no report found/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs rejects a stale explicit-target summary when the current command writes no report', () => {
+  const root = makeProject('coverage-target-stale-report');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    approvePrd(root);
+    writeJson(join(root, 'apps/backend/coverage/coverage-summary.json'), { total: { lines: { total: 100, covered: 100 } } });
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'enforce', min: 0.9,
+        targets: [{ id: 'backend', cwd: 'apps/backend', command: 'node -e "process.exit(0)"', summary: 'coverage/coverage-summary.json' }],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, 'error');
+    assert.match(summary.stacks[0].message, /no report found/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs accepts an explicit target that regenerates its removed summary', () => {
+  const root = makeProject('coverage-target-regenerated-report');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    writeJson(join(root, 'apps/backend/coverage/coverage-summary.json'), { total: { lines: { total: 100, covered: 0 } } });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 75 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'enforce', min: 0.7,
+        targets: [{ id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' }],
+      },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, 'ok');
+    assert.equal(summary.aggregate.pct, 0.75);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1332,19 +1781,94 @@ test('sync-plugin.mjs --force=<path> resolves only the named file, leaving other
   }
 });
 
-test('sync-plugin.mjs refreshes an already-installed git pre-commit hook when .githooks/pre-commit changes', () => {
-  const root = makeProject('sync-hook');
+test('sync-plugin.mjs preserves an unrelated project pre-commit hook and requests manual composition', () => {
+  const root = makeProject('sync-custom-hook');
   try {
     const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
     assert.equal(initGit.status, 0, initGit.stderr);
     const hookPath = join(root, '.git/hooks/pre-commit');
     mkdirSync(dirname(hookPath), { recursive: true });
-    writeFileSync(hookPath, '#!/bin/sh\necho stale hook\n', 'utf8');
+    const customHook = '#!/bin/sh\nnpm run lint\nnpm run security-check\n';
+    writeFileSync(hookPath, customHook, 'utf8');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
-    const refreshed = readFileSync(hookPath, 'utf8');
-    assert.equal(refreshed, readFileSync(join(root, '.githooks/pre-commit'), 'utf8'), 'the live hook should now match .githooks/pre-commit');
+    assert.equal(readFileSync(hookPath, 'utf8'), customHook, 'an unrelated project hook must remain byte-identical');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs preserves a partial Throughline-like hook as project-owned', () => {
+  const root = makeProject('sync-partial-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const partialHook = '#!/bin/sh\nnode scripts/validate.mjs\nnpm run lint\n';
+    writeFileSync(hookPath, partialHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), partialHook, 'one Throughline command is not enough to claim ownership');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs preserves a project hook composed with both Throughline checks', () => {
+  const root = makeProject('sync-composed-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const composedHook = '#!/bin/sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\nnpm run lint\n';
+    writeFileSync(hookPath, composedHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), composedHook, 'a composed project hook must remain byte-identical');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs does not claim a hook containing only commented Throughline commands', () => {
+  const root = makeProject('sync-commented-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const customHook = '#!/bin/sh\n# node scripts/ensure-branch.mjs --check-only\n# node scripts/validate.mjs\nnpm run lint\n';
+    writeFileSync(hookPath, customHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), customHook, 'commented examples do not make a hook Throughline-managed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook', () => {
+  const root = makeProject('sync-managed-hook');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    writeFileSync(hookPath, '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n', 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1376,7 +1900,10 @@ test('sync-plugin.mjs recomputes legacyContractGrace on a later --apply once bac
 
     approvePrd(root);
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
-      stories: [{ id: 'S-1', title: 'Reconciled from GH issue', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0, gh_issue: 12 }],
+      stories: [
+        { id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: [], status: 'notstarted', order: 0 },
+        { id: 'S-2', title: 'Reconciled from GH issue', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 1, gh_issue: 12 },
+      ],
     }));
     const second = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
     assert.equal(second.status, 0, second.stderr || second.stdout);
@@ -1580,6 +2107,18 @@ test('ship-feature exists alongside ship-epic and scopes G7 by feature slug inst
   assert.match(text, /ensure-branch\.mjs --check-only/);
 });
 
+test('release skill requires project prerequisites and subject-scoped G7 for every release epic before G8', () => {
+  const text = readFileSync(join(repoRoot, 'skills/release/SKILL.md'), 'utf8');
+  assert.match(text, /gate\.mjs check G1/);
+  assert.match(text, /gate\.mjs check G2/);
+  assert.match(text, /gate\.mjs check G3/);
+  assert.match(text, /gate\.mjs check G4/);
+  assert.match(text, /gate\.mjs check G5/);
+  assert.match(text, /gate\.mjs check G7 --subject <epic-id>/);
+  assert.match(text, /each epic tagged.*release/i);
+  assert.match(text, /Before presenting for G8:[^\n]*G1[^\n]*G5[^\n]*subject-scoped G7/);
+});
+
 test('define-feature and implement-feature exist, standalone mode staying non-backlog-tracked like ship-feature', () => {
   const definePath = join(repoRoot, 'skills/define-feature/SKILL.md');
   const implementPath = join(repoRoot, 'skills/implement-feature/SKILL.md');
@@ -1661,7 +2200,7 @@ test('validate.mjs fails loud when feature working state is written under .claud
   }
 });
 
-test('sync-plugin.mjs --repair-state moves misplaced working state into .throughline/ and validate.mjs passes again', () => {
+test('sync-plugin.mjs --repair-state reports then moves epic and feature state from every supported legacy root', () => {
   const root = makeProject('repair-state');
   try {
     approvePrd(root);
@@ -1669,18 +2208,30 @@ test('sync-plugin.mjs --repair-state moves misplaced working state into .through
 
     mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
     writeFileSync(join(root, '.claude/epic-1/ledger.md'), '# ledger\n', 'utf8');
+    mkdirSync(join(root, '.claude/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.claude/feature-readme-fix/spec.md'), '# spec\n', 'utf8');
+    mkdirSync(join(root, '.cursor/feature-status-fix'), { recursive: true });
+    writeFileSync(join(root, '.cursor/feature-status-fix/spec.md'), '# cursor spec\n', 'utf8');
     writeFileSync(join(root, '.claude/gates.json'), '{}', 'utf8');
 
     const report = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state']);
     assert.equal(report.status, 0, report.stderr || report.stdout);
     assert.match(report.stdout, /\.claude\/epic-1/);
+    assert.match(report.stdout, /\.claude\/feature-readme-fix/);
+    assert.match(report.stdout, /\.cursor\/feature-status-fix/);
     assert.match(report.stdout, /\.claude\/gates\.json/);
     assert.equal(existsSync(join(root, '.claude/epic-1')), true, 'report-only mode must not move anything');
+    assert.equal(existsSync(join(root, '.claude/feature-readme-fix')), true, 'report-only mode must not move feature state');
+    assert.equal(existsSync(join(root, '.cursor/feature-status-fix')), true, 'report-only mode must not move feature state from another root');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state', '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
     assert.equal(existsSync(join(root, '.claude/epic-1')), false);
+    assert.equal(existsSync(join(root, '.claude/feature-readme-fix')), false);
+    assert.equal(existsSync(join(root, '.cursor/feature-status-fix')), false);
     assert.equal(existsSync(join(root, '.throughline/epic-1/ledger.md')), true);
+    assert.equal(readFileSync(join(root, '.throughline/feature-readme-fix/spec.md'), 'utf8'), '# spec\n');
+    assert.equal(readFileSync(join(root, '.throughline/feature-status-fix/spec.md'), 'utf8'), '# cursor spec\n');
     assert.equal(existsSync(join(root, '.throughline/gates.json')), true);
 
     const validate = runNode(root, join(root, 'scripts/validate.mjs'));
@@ -1690,19 +2241,19 @@ test('sync-plugin.mjs --repair-state moves misplaced working state into .through
   }
 });
 
-test('sync-plugin.mjs --repair-state flags a conflict instead of overwriting an existing .throughline/ destination', () => {
+test('sync-plugin.mjs --repair-state flags a feature conflict instead of overwriting an existing .throughline/ destination', () => {
   const root = makeProject('repair-conflict');
   try {
-    mkdirSync(join(root, '.throughline/epic-1'), { recursive: true });
-    writeFileSync(join(root, '.throughline/epic-1/ledger.md'), 'real ledger\n', 'utf8');
-    mkdirSync(join(root, '.claude/epic-1'), { recursive: true });
-    writeFileSync(join(root, '.claude/epic-1/ledger.md'), 'stray duplicate\n', 'utf8');
+    mkdirSync(join(root, '.throughline/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.throughline/feature-readme-fix/spec.md'), 'real spec\n', 'utf8');
+    mkdirSync(join(root, '.claude/feature-readme-fix'), { recursive: true });
+    writeFileSync(join(root, '.claude/feature-readme-fix/spec.md'), 'stray duplicate\n', 'utf8');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--repair-state', '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
     assert.match(apply.stdout, /CONFLICT/);
-    assert.equal(readFileSync(join(root, '.throughline/epic-1/ledger.md'), 'utf8'), 'real ledger\n', 'the real ledger must not be overwritten');
-    assert.equal(existsSync(join(root, '.claude/epic-1')), true, 'a conflicting item must be left in place, not silently dropped');
+    assert.equal(readFileSync(join(root, '.throughline/feature-readme-fix/spec.md'), 'utf8'), 'real spec\n', 'the real feature spec must not be overwritten');
+    assert.equal(existsSync(join(root, '.claude/feature-readme-fix')), true, 'a conflicting feature must be left in place, not silently dropped');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1715,6 +2266,131 @@ function fillPrd(root) {
   text = text.replace('| REQ-02 | … | P1 | … | v1 |', '| REQ-02 | User can log in | P1 | Session established | v1 |');
   writeFileSync(path, text, 'utf8');
 }
+
+const architectureDocs = [
+  ['01-system-overview.md', 'System Overview'],
+  ['02-tech-stack.md', 'Tech Stack'],
+  ['03-data-model.md', 'Data Model'],
+  ['05-api-design.md', 'API Design'],
+  ['07-infrastructure.md', 'Infrastructure'],
+];
+
+function fillArchitecture(root, { threatModel = 'overview' } = {}) {
+  for (const [file, title] of architectureDocs) {
+    const security = file === '01-system-overview.md' && threatModel === 'overview'
+      ? '\n**Personas Applied:** Architect, Security\n\n## Security threat model\n\nAuthentication, authorization, secrets, hostile input, and data exposure risks are assessed with explicit mitigations.\n'
+      : '';
+    writeFileSync(join(root, 'docs/architecture', file), `---\ndoc: ${title}\nproject: Fixture\nstatus: draft\nupdated: 2026-08-13\n---\n\n# ${title}\n\n## Context\n\nThis document records concrete architectural decisions for the fixture application.\n\n## Details\n\nThe fixture uses explicit boundaries, deterministic interfaces, and deployment controls.${security}`, 'utf8');
+  }
+  writeFileSync(join(root, 'docs/architecture/decisions/ADR-0001-example.md'), '---\ndoc: adr\nproject: Fixture\nstatus: accepted\nupdated: 2026-08-13\n---\n\n# ADR-0001: Use deterministic fixtures\n\n## Context\n\nTests need repeatable project state.\n\n## Decision\n\nCreate each fixture from the checked-in bootstrap assets.\n\n## Consequences\n\nTests remain isolated and deterministic.\n\n## Alternatives considered\n\n- Share one mutable fixture, rejected because tests would interfere.\n', 'utf8');
+  if (threatModel === 'dedicated') {
+    writeFileSync(join(root, 'docs/architecture/security-threat-model.md'), '---\ndoc: Security Threat Model\nproject: Fixture\nstatus: draft\nupdated: 2026-08-13\n---\n\n# Security Threat Model\n\n**Personas Applied:** Security, Developer, Architect\n\nAuthentication, authorization, secret handling, hostile input, and data exposure each have documented mitigations and owners.\n', 'utf8');
+  }
+}
+
+test('S-12 product check rejects a requirements table with no valid requirement rows', () => {
+  const root = makeProject('checkdocs-empty-prd');
+  try {
+    writeApprovedPrd(root, []);
+
+    const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+
+    assert.equal(result.status, 1);
+    assert.ok(JSON.parse(result.stdout).errors.some((e) => e.includes('at least one valid REQ-xx row')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 product check rejects malformed requirement-like IDs only inside the Requirements table', () => {
+  const root = makeProject('checkdocs-malformed-prd');
+  try {
+    writeFileSync(join(root, 'docs/product/06-prd.md'), `---\ndoc: prd\nproject: Fixture\nstatus: approved\n---\n\n## Reference data\n\n| ID | Value |\n|---|---|\n| REQ-NOT-A-REQUIREMENT | ignored |\n\n## Requirements\n\n| ID | Requirement | Priority | Acceptance | Release |\n|---|---|---|---|---|\n| REQ-ABC | Invalid identifier | P0 | Rejected | v1 |\n`, 'utf8');
+
+    const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+
+    assert.equal(result.status, 1);
+    const errors = JSON.parse(result.stdout).errors;
+    assert.ok(errors.some((e) => e.includes("malformed requirement id 'REQ-ABC'")));
+    assert.ok(errors.every((e) => !e.includes('REQ-NOT-A-REQUIREMENT')));
+    assert.ok(errors.every((e) => !e.includes("requirement id 'ID'")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 architecture check identifies scaffold placeholders in every required document and ADR', () => {
+  const root = makeProject('checkdocs-architecture-placeholders');
+  try {
+    fillArchitecture(root);
+    const cases = [
+      ['docs/architecture/01-system-overview.md', '> One-line purpose of this document.'],
+      ['docs/architecture/02-tech-stack.md', '_Why this exists / what problem it addresses._'],
+      ['docs/architecture/03-data-model.md', '_Main content._'],
+      ['docs/architecture/05-api-design.md', '- [ ] …'],
+      ['docs/architecture/07-infrastructure.md', '> One-line purpose of this document.'],
+      ['docs/architecture/decisions/ADR-0001-example.md', '_What we chose._'],
+    ];
+
+    for (const [rel, marker] of cases) {
+      const path = join(root, rel);
+      const filled = readFileSync(path, 'utf8');
+      writeFileSync(path, filled + `\n${marker}\n`, 'utf8');
+      const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+      assert.equal(result.status, 1, `${rel} was accepted with ${marker}`);
+      assert.ok(JSON.parse(result.stdout).errors.some((e) => e.includes(rel.replace('docs/', ''))), result.stdout);
+      writeFileSync(path, filled, 'utf8');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 architecture check requires persona evidence and substantive threat-model content', () => {
+  const root = makeProject('checkdocs-threat-model');
+  try {
+    fillArchitecture(root, { threatModel: 'none' });
+    const missing = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(missing.status, 1);
+    assert.ok(JSON.parse(missing.stdout).errors.some((e) => e.includes('substantive security threat model')));
+
+    const overviewPath = join(root, 'docs/architecture/01-system-overview.md');
+    let overview = readFileSync(overviewPath, 'utf8') + '\n**Personas Applied:** Architect, Security\n\n## Security threat model\n\nToo short.\n';
+    writeFileSync(overviewPath, overview, 'utf8');
+    const short = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(short.status, 1);
+    assert.ok(JSON.parse(short.stdout).errors.some((e) => e.includes('substantive security threat model')));
+
+    overview = overview.replace('**Personas Applied:** Architect, Security', '**Personas Applied:** Architect');
+    writeFileSync(overviewPath, overview.replace('Too short.', 'Authentication, authorization, secrets, hostile input, and data exposure risks have explicit mitigations.'), 'utf8');
+    const missingPersona = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(missingPersona.status, 1);
+    assert.ok(JSON.parse(missingPersona.stdout).errors.some((e) => e.includes('Architect and Security personas')));
+
+    writeFileSync(join(root, 'docs/architecture/security-threat-model.md'), '# Security threat model\n\n**Personas Applied:** Security, Architect\n\nToo short.\n', 'utf8');
+    const splitEvidence = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(splitEvidence.status, 1);
+    assert.ok(JSON.parse(splitEvidence.stdout).errors.some((e) => e.includes('Architect and Security personas')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 architecture check accepts filled documents with overview or dedicated threat-model evidence', () => {
+  for (const threatModel of ['overview', 'dedicated']) {
+    const root = makeProject(`checkdocs-filled-architecture-${threatModel}`);
+    try {
+      fillArchitecture(root, { threatModel });
+
+      const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(JSON.parse(result.stdout).passed, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
 
 test('check-docs.mjs --tier=product fails against unfilled placeholders and passes once filled', () => {
   const root = makeProject('checkdocs-prd');
@@ -1812,9 +2488,10 @@ test('check-docs.mjs requires a real checkpoint line before accepting fidelity: 
   }
 });
 
-test('check-docs.mjs catches an ADR superseded-by reference pointing at a nonexistent ADR', () => {
+test('S-12 check-docs.mjs catches an ADR superseded-by reference pointing at a nonexistent ADR', () => {
   const root = makeProject('checkdocs-adr');
   try {
+    fillArchitecture(root);
     mkdirSync(join(root, 'docs/architecture/decisions'), { recursive: true });
     writeFileSync(join(root, 'docs/architecture/decisions/ADR-0002-broken.md'), '---\ndoc: adr\nstatus: superseded-by ADR-9999\nupdated: 2026-08-03\n---\n\n# ADR-0002\n', 'utf8');
 

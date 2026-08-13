@@ -1,0 +1,23 @@
+{
+  "id": "S-8",
+  "title": "Make lifecycle gates subject-safe, optional-aware, and release-complete",
+  "goal": "Prevent lifecycle progress and release approval from being inferred from unscoped, optional, or incomplete gate state.",
+  "in_scope": [
+    "Make gate.mjs reject bare check calls for G6 and G7 with an actionable --subject message",
+    "Make gate.mjs next omit pending G1.5 because assumption validation is optional",
+    "Strengthen the release skill gate-in to check G1 through G5 and each release epic's subject-scoped G7 approval",
+    "Update CLI and skill regression coverage for the stricter gate contract"
+  ],
+  "out_of_scope": [
+    "Changing the meaning or approval ownership of G1 through G9",
+    "Making G1.5 mandatory",
+    "Automatically approving any prerequisite gate"
+  ],
+  "acceptance": "Bare G6 and G7 checks exit non-zero with an actionable --subject error; gate next skips optional G1.5 when it is pending; and the release skill requires approved G1 through G5 plus subject-scoped G7 approval for every epic in the release before presenting G8.",
+  "invariants": [
+    "G6 and G7 approvals remain independently stored per subject",
+    "G1.5 remains visible in list output even when next skips it",
+    "G8 is never presented while an applicable upstream lifecycle gate is pending or rejected"
+  ],
+  "prd_ref": "REQ-08"
+}

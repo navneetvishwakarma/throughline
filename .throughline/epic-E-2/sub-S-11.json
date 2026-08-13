@@ -1,0 +1,27 @@
+{
+  "id": "S-11",
+  "title": "Preserve project hooks and repair standalone feature state",
+  "goal": "Upgrade or adopt Throughline without deleting project-owned commit checks or leaving portable feature state stranded under an agent-specific directory.",
+  "in_scope": [
+    "Install the live Throughline pre-commit hook only when no live hook exists",
+    "Refresh a live hook only when it can be identified as Throughline-managed",
+    "Leave unrelated custom hooks byte-for-byte unchanged and report manual composition as required",
+    "Include feature-* directories in report, apply, and conflict behavior for --repair-state across every unsupported platform root"
+  ],
+  "out_of_scope": [
+    "Executing or rewriting arbitrary third-party hook managers",
+    "Automatically merging unknown shell scripts",
+    "Forcing state conflicts or overwriting existing .throughline destinations"
+  ],
+  "acceptance": "sync-plugin.mjs --apply installs the Throughline pre-commit hook only when no live hook exists or the live hook is already Throughline-managed; an unrelated custom hook remains byte-for-byte unchanged and is reported for manual composition, while --repair-state detects, reports, moves, and conflict-protects feature-* working directories under every unsupported platform root just as it does epic-* and ship-* state.",
+  "invariants": [
+    "Project-owned hooks are never overwritten without explicit force or manual action",
+    "Portable working state has exactly one authoritative destination under .throughline",
+    "Repair remains report-only unless --apply is present"
+  ],
+  "prd_ref": [
+    "REQ-10",
+    "REQ-12",
+    "REQ-15"
+  ]
+}

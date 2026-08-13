@@ -50,14 +50,25 @@ for (const s of data.stories) {
   const prev = s.status;
   const state = s.gh_issue != null ? ghState.get(s.gh_issue) : undefined;
   if (state === 'CLOSED') s.status = 'done';
-  else if (state === 'OPEN' && s.status === 'notstarted') s.status = 'in_progress';
+  else if (state === 'OPEN') s.status = 'in_progress';
   if (s.status !== prev) changed++;
 }
-for (const s of data.stories) {
-  if (s.status === 'done') continue;
-  const blocked = (s.blocked_by || []).some((d) => !isDone(d));
-  const next = blocked ? 'blocked' : (s.status === 'blocked' ? (s.gh_issue != null ? 'in_progress' : 'notstarted') : s.status);
-  if (next !== s.status) { s.status = next; changed++; }
+let dependenciesChanged = true;
+while (dependenciesChanged) {
+  dependenciesChanged = false;
+  for (const s of data.stories) {
+    const blocked = (s.blocked_by || []).some((d) => !isDone(d));
+    const state = s.gh_issue != null ? ghState.get(s.gh_issue) : undefined;
+    const recovered = tracker === 'github' && s.gh_issue != null
+      ? (state === 'CLOSED' ? 'done' : 'in_progress')
+      : 'notstarted';
+    const next = blocked ? 'blocked' : (s.status === 'blocked' ? recovered : s.status);
+    if (next !== s.status) {
+      s.status = next;
+      changed++;
+      dependenciesChanged = true;
+    }
+  }
 }
 writeFileSync(backlogPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
 const counts = data.stories.reduce((a, s) => ((a[s.status] = (a[s.status] || 0) + 1), a), {});
