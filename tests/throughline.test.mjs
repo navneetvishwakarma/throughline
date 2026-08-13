@@ -287,6 +287,116 @@ test('sync-status.mjs infers and persists tracker=github when gh_issue data exis
   }
 });
 
+test('sync-status.mjs reopens a done GitHub story without erasing verification evidence', () => {
+  const root = makeProject('sync-status-github-reopen');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    const verify = { ci: 'pass', commit: 'abc123', coverage: 91 };
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'github',
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'done', order: 0,
+        gh_issue: 42, verify,
+      }],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-42.json'), { number: 42, state: 'OPEN' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const [story] = JSON.parse(readFileSync(backlogPath, 'utf8')).stories;
+    assert.equal(story.status, 'in_progress');
+    assert.deepEqual(story.verify, verify);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs blocks every done dependent when an upstream GitHub issue reopens regardless of story order', () => {
+  const root = makeProject('sync-status-github-reopen-chain');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'github',
+      stories: [
+        { id: 'S-3', title: 'Release', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Release works.', blocked_by: ['S-2'], status: 'done', order: 2, gh_issue: 43, verify: { ci: 'pass', commit: 'ccc333' } },
+        { id: 'S-2', title: 'Integrate', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Integration works.', blocked_by: ['S-1'], status: 'done', order: 1, gh_issue: 42, verify: { ci: 'pass', commit: 'bbb222' } },
+        { id: 'S-1', title: 'Foundation', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Foundation works.', blocked_by: [], status: 'done', order: 0, gh_issue: 41, verify: { ci: 'pass', commit: 'aaa111' } },
+      ],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-41.json'), { number: 41, state: 'OPEN' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-42.json'), { number: 42, state: 'CLOSED' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-43.json'), { number: 43, state: 'CLOSED' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const stories = new Map(JSON.parse(readFileSync(backlogPath, 'utf8')).stories.map((story) => [story.id, story]));
+    assert.equal(stories.get('S-1').status, 'in_progress');
+    assert.equal(stories.get('S-2').status, 'blocked');
+    assert.equal(stories.get('S-3').status, 'blocked');
+    assert.deepEqual(stories.get('S-2').verify, { ci: 'pass', commit: 'bbb222' });
+    assert.deepEqual(stories.get('S-3').verify, { ci: 'pass', commit: 'ccc333' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs keeps a closed GitHub story chain done when every dependency is satisfied', () => {
+  const root = makeProject('sync-status-github-closed-chain');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'github',
+      stories: [
+        { id: 'S-2', title: 'Integrate', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Integration works.', blocked_by: ['S-1'], status: 'done', order: 1, gh_issue: 52, verify: { ci: 'pass', commit: 'bbb222' } },
+        { id: 'S-1', title: 'Foundation', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Foundation works.', blocked_by: [], status: 'done', order: 0, gh_issue: 51, verify: { ci: 'pass', commit: 'aaa111' } },
+      ],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-51.json'), { number: 51, state: 'CLOSED' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-52.json'), { number: 52, state: 'CLOSED' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const stories = JSON.parse(readFileSync(backlogPath, 'utf8')).stories;
+    assert.deepEqual(stories.map(({ id, status }) => ({ id, status })), [
+      { id: 'S-2', status: 'done' },
+      { id: 'S-1', status: 'done' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-status.mjs keeps local tracker ownership and recovers an unblocked story to notstarted', () => {
+  const root = makeProject('sync-status-local-recovery');
+  try {
+    const backlogPath = join(root, 'docs/engineering/backlog.json');
+    const verify = { ci: 'pass', commit: 'bbb222' };
+    writeJson(backlogPath, baseBacklog({
+      tracker: 'local',
+      stories: [
+        { id: 'S-1', title: 'Foundation', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Foundation works.', blocked_by: [], status: 'done', order: 0, gh_issue: 61 },
+        { id: 'S-2', title: 'Integrate', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'Integration works.', blocked_by: ['S-1'], status: 'blocked', order: 1, gh_issue: 62, verify },
+      ],
+    }));
+    writeJson(join(root, '.throughline/ship-E-1/issue-61.json'), { number: 61, state: 'OPEN' });
+    writeJson(join(root, '.throughline/ship-E-1/issue-62.json'), { number: 62, state: 'CLOSED' });
+
+    const result = runNode(root, join(root, 'scripts/sync-status.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const stories = new Map(JSON.parse(readFileSync(backlogPath, 'utf8')).stories.map((story) => [story.id, story]));
+    assert.equal(stories.get('S-1').status, 'done');
+    assert.equal(stories.get('S-2').status, 'notstarted');
+    assert.deepEqual(stories.get('S-2').verify, verify);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('gate script persists approval state and blocks missing approvals', () => {
   const root = makeProject('gates');
   try {
