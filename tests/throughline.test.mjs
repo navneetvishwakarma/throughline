@@ -2017,6 +2017,131 @@ function fillPrd(root) {
   writeFileSync(path, text, 'utf8');
 }
 
+const architectureDocs = [
+  ['01-system-overview.md', 'System Overview'],
+  ['02-tech-stack.md', 'Tech Stack'],
+  ['03-data-model.md', 'Data Model'],
+  ['05-api-design.md', 'API Design'],
+  ['07-infrastructure.md', 'Infrastructure'],
+];
+
+function fillArchitecture(root, { threatModel = 'overview' } = {}) {
+  for (const [file, title] of architectureDocs) {
+    const security = file === '01-system-overview.md' && threatModel === 'overview'
+      ? '\n**Personas Applied:** Architect, Security\n\n## Security threat model\n\nAuthentication, authorization, secrets, hostile input, and data exposure risks are assessed with explicit mitigations.\n'
+      : '';
+    writeFileSync(join(root, 'docs/architecture', file), `---\ndoc: ${title}\nproject: Fixture\nstatus: draft\nupdated: 2026-08-13\n---\n\n# ${title}\n\n## Context\n\nThis document records concrete architectural decisions for the fixture application.\n\n## Details\n\nThe fixture uses explicit boundaries, deterministic interfaces, and deployment controls.${security}`, 'utf8');
+  }
+  writeFileSync(join(root, 'docs/architecture/decisions/ADR-0001-example.md'), '---\ndoc: adr\nproject: Fixture\nstatus: accepted\nupdated: 2026-08-13\n---\n\n# ADR-0001: Use deterministic fixtures\n\n## Context\n\nTests need repeatable project state.\n\n## Decision\n\nCreate each fixture from the checked-in bootstrap assets.\n\n## Consequences\n\nTests remain isolated and deterministic.\n\n## Alternatives considered\n\n- Share one mutable fixture, rejected because tests would interfere.\n', 'utf8');
+  if (threatModel === 'dedicated') {
+    writeFileSync(join(root, 'docs/architecture/security-threat-model.md'), '---\ndoc: Security Threat Model\nproject: Fixture\nstatus: draft\nupdated: 2026-08-13\n---\n\n# Security Threat Model\n\n**Personas Applied:** Security, Developer, Architect\n\nAuthentication, authorization, secret handling, hostile input, and data exposure each have documented mitigations and owners.\n', 'utf8');
+  }
+}
+
+test('S-12 product check rejects a requirements table with no valid requirement rows', () => {
+  const root = makeProject('checkdocs-empty-prd');
+  try {
+    writeApprovedPrd(root, []);
+
+    const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+
+    assert.equal(result.status, 1);
+    assert.ok(JSON.parse(result.stdout).errors.some((e) => e.includes('at least one valid REQ-xx row')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 product check rejects malformed requirement-like IDs only inside the Requirements table', () => {
+  const root = makeProject('checkdocs-malformed-prd');
+  try {
+    writeFileSync(join(root, 'docs/product/06-prd.md'), `---\ndoc: prd\nproject: Fixture\nstatus: approved\n---\n\n## Reference data\n\n| ID | Value |\n|---|---|\n| REQ-NOT-A-REQUIREMENT | ignored |\n\n## Requirements\n\n| ID | Requirement | Priority | Acceptance | Release |\n|---|---|---|---|---|\n| REQ-ABC | Invalid identifier | P0 | Rejected | v1 |\n`, 'utf8');
+
+    const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=product', '--json']);
+
+    assert.equal(result.status, 1);
+    const errors = JSON.parse(result.stdout).errors;
+    assert.ok(errors.some((e) => e.includes("malformed requirement id 'REQ-ABC'")));
+    assert.ok(errors.every((e) => !e.includes('REQ-NOT-A-REQUIREMENT')));
+    assert.ok(errors.every((e) => !e.includes("requirement id 'ID'")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 architecture check identifies scaffold placeholders in every required document and ADR', () => {
+  const root = makeProject('checkdocs-architecture-placeholders');
+  try {
+    fillArchitecture(root);
+    const cases = [
+      ['docs/architecture/01-system-overview.md', '> One-line purpose of this document.'],
+      ['docs/architecture/02-tech-stack.md', '_Why this exists / what problem it addresses._'],
+      ['docs/architecture/03-data-model.md', '_Main content._'],
+      ['docs/architecture/05-api-design.md', '- [ ] …'],
+      ['docs/architecture/07-infrastructure.md', '> One-line purpose of this document.'],
+      ['docs/architecture/decisions/ADR-0001-example.md', '_What we chose._'],
+    ];
+
+    for (const [rel, marker] of cases) {
+      const path = join(root, rel);
+      const filled = readFileSync(path, 'utf8');
+      writeFileSync(path, filled + `\n${marker}\n`, 'utf8');
+      const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+      assert.equal(result.status, 1, `${rel} was accepted with ${marker}`);
+      assert.ok(JSON.parse(result.stdout).errors.some((e) => e.includes(rel.replace('docs/', ''))), result.stdout);
+      writeFileSync(path, filled, 'utf8');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 architecture check requires persona evidence and substantive threat-model content', () => {
+  const root = makeProject('checkdocs-threat-model');
+  try {
+    fillArchitecture(root, { threatModel: 'none' });
+    const missing = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(missing.status, 1);
+    assert.ok(JSON.parse(missing.stdout).errors.some((e) => e.includes('substantive security threat model')));
+
+    const overviewPath = join(root, 'docs/architecture/01-system-overview.md');
+    let overview = readFileSync(overviewPath, 'utf8') + '\n**Personas Applied:** Architect, Security\n\n## Security threat model\n\nToo short.\n';
+    writeFileSync(overviewPath, overview, 'utf8');
+    const short = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(short.status, 1);
+    assert.ok(JSON.parse(short.stdout).errors.some((e) => e.includes('substantive security threat model')));
+
+    overview = overview.replace('**Personas Applied:** Architect, Security', '**Personas Applied:** Architect');
+    writeFileSync(overviewPath, overview.replace('Too short.', 'Authentication, authorization, secrets, hostile input, and data exposure risks have explicit mitigations.'), 'utf8');
+    const missingPersona = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(missingPersona.status, 1);
+    assert.ok(JSON.parse(missingPersona.stdout).errors.some((e) => e.includes('Architect and Security personas')));
+
+    writeFileSync(join(root, 'docs/architecture/security-threat-model.md'), '# Security threat model\n\n**Personas Applied:** Security, Architect\n\nToo short.\n', 'utf8');
+    const splitEvidence = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+    assert.equal(splitEvidence.status, 1);
+    assert.ok(JSON.parse(splitEvidence.stdout).errors.some((e) => e.includes('Architect and Security personas')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('S-12 architecture check accepts filled documents with overview or dedicated threat-model evidence', () => {
+  for (const threatModel of ['overview', 'dedicated']) {
+    const root = makeProject(`checkdocs-filled-architecture-${threatModel}`);
+    try {
+      fillArchitecture(root, { threatModel });
+
+      const result = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--tier=architecture', '--json']);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(JSON.parse(result.stdout).passed, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
 test('check-docs.mjs --tier=product fails against unfilled placeholders and passes once filled', () => {
   const root = makeProject('checkdocs-prd');
   try {
@@ -2113,9 +2238,10 @@ test('check-docs.mjs requires a real checkpoint line before accepting fidelity: 
   }
 });
 
-test('check-docs.mjs catches an ADR superseded-by reference pointing at a nonexistent ADR', () => {
+test('S-12 check-docs.mjs catches an ADR superseded-by reference pointing at a nonexistent ADR', () => {
   const root = makeProject('checkdocs-adr');
   try {
+    fillArchitecture(root);
     mkdirSync(join(root, 'docs/architecture/decisions'), { recursive: true });
     writeFileSync(join(root, 'docs/architecture/decisions/ADR-0002-broken.md'), '---\ndoc: adr\nstatus: superseded-by ADR-9999\nupdated: 2026-08-03\n---\n\n# ADR-0002\n', 'utf8');
 
