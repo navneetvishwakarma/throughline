@@ -34,7 +34,7 @@
       "prd_ref": "REQ-01",
       "acceptance": "Invalid coverage.mode, out-of-range coverage.min, blank coverage.command, non-string coverage.stacks entries, and malformed coverage.targets entries (missing fields, duplicate ids) all fail validate.mjs with a specific error, even when legacyContractGrace is active.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 0,
       "verify": {
         "ci": "pass",
@@ -48,7 +48,7 @@
       "prd_ref": "REQ-02",
       "acceptance": "An unknown coverage.mode, a non-numeric/out-of-range coverage.min, an invalid --threshold, or an unknown --stack all exit 2 with a clear message; only correctly-spelled off/warn bypass threshold enforcement.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 1,
       "verify": {
         "ci": "pass",
@@ -64,7 +64,7 @@
       "blocked_by": [
         "S-2"
       ],
-      "status": "in_progress",
+      "status": "done",
       "order": 2,
       "verify": {
         "ci": "pass",
@@ -78,7 +78,7 @@
       "prd_ref": "REQ-04",
       "acceptance": "The rendered .github/workflows/throughline.yml includes permissions: contents: read and contains no || true; a customized or pre-0.3.2 copy is never overwritten and never enters pendingReview but is reported as differing from the current render; a repo with no package.json at all defers seeding instead of baking in a workflow with no install step.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 3,
       "verify": {
         "ci": "pass",
@@ -92,7 +92,7 @@
       "prd_ref": "REQ-05",
       "acceptance": "An epic with an explicit release and no matching release_in_flight fails validate.mjs; build-dashboard.mjs selects an actual declared release and shows a visible configuration warning instead of a false 0/0 on-track dashboard.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 4,
       "verify": {
         "ci": "pass",
@@ -106,7 +106,7 @@
       "prd_ref": "REQ-06",
       "acceptance": "Both names exit non-zero and leave the working tree exactly where it was, whether called from a feature branch, from main itself, or from detached HEAD.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 5,
       "verify": {
         "ci": "pass",
@@ -127,7 +127,7 @@
         "S-5",
         "S-6"
       ],
-      "status": "in_progress",
+      "status": "done",
       "order": 6,
       "verify": {
         "ci": "pass",
