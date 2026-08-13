@@ -29,8 +29,8 @@
     },
     "G7": {
       "status": "approved",
-      "note": "local feature merge approved",
-      "updatedAt": "2026-08-13T07:51:54.592Z",
+      "note": "trivial one-line gitignore fix, approved via 'fix both'",
+      "updatedAt": "2026-08-13T07:55:06.405Z",
       "subjects": {
         "E-1": {
           "status": "approved",
@@ -41,6 +41,11 @@
           "status": "approved",
           "note": "local feature merge approved",
           "updatedAt": "2026-08-13T07:51:54.592Z"
+        },
+        "gitignore-coverage-artifacts": {
+          "status": "approved",
+          "note": "trivial one-line gitignore fix, approved via 'fix both'",
+          "updatedAt": "2026-08-13T07:55:06.405Z"
         }
       }
     }
