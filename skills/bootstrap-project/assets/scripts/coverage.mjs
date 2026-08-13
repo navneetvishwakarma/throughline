@@ -36,7 +36,9 @@ function writeJson(path, value) {
   writeFileSync(path, JSON.stringify(value, null, 2) + '\n', 'utf8');
 }
 function sh(cmd, cmdArgs, opts = {}) {
-  return spawnSync(cmd, cmdArgs, { cwd: root, encoding: 'utf8', windowsHide: true, ...opts });
+  // Windows can't spawnSync a .cmd/.bat shim (e.g. node_modules/.bin/vitest.cmd) without a shell.
+  const shell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(cmd);
+  return spawnSync(cmd, cmdArgs, { cwd: root, encoding: 'utf8', windowsHide: true, shell, ...opts });
 }
 function ok(result) { return result && !result.error && result.status === 0; }
 function binPath(name) {
