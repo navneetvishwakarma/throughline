@@ -4,13 +4,15 @@
 // global flag left over from a previous epic would silently satisfy a later epic's
 // gate-in check without the human ever approving that epic's plan or merge. Pass
 // --subject <epic-id> (or any stable id) to scope approval to that one thing; the
-// global slot still updates alongside it for `list`/legacy bare `check` callers.
+// global slot still updates alongside it for `list`; checks must name the subject.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const root = process.cwd();
 const gatePath = join(root, '.throughline/gates.json');
 const gates = ['G1', 'G1.5', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'];
+const optionalGates = new Set(['G1.5']);
+const subjectGates = new Set(['G6', 'G7']);
 const [cmd, rawGate, ...rest] = process.argv.slice(2);
 
 function usage() {
@@ -61,7 +63,7 @@ if (cmd === 'list') {
 }
 
 if (cmd === 'next') {
-  const next = gates.find((gate) => data.gates[gate]?.status !== 'approved');
+  const next = gates.find((gate) => !optionalGates.has(gate) && data.gates[gate]?.status !== 'approved');
   console.log(next ? next + ' pending' : 'All gates approved');
   process.exit(0);
 }
@@ -69,6 +71,10 @@ if (cmd === 'next') {
 requireGate(rawGate);
 
 if (cmd === 'check') {
+  if (subjectGates.has(rawGate) && !subject) {
+    console.error(rawGate + ' requires --subject <id> because approval is recorded per subject');
+    process.exit(2);
+  }
   if (subject) {
     if (data.gates[rawGate]?.subjects?.[subject]?.status === 'approved') {
       console.log(rawGate + ' approved for ' + subject);

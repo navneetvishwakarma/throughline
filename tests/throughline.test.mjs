@@ -283,16 +283,16 @@ test('gate script persists approval state and blocks missing approvals', () => {
     const gateScript = join(root, 'scripts/gate.mjs');
     assert.equal(existsSync(gateScript), true);
 
-    const missing = runNode(root, gateScript, ['check', 'G6']);
+    const missing = runNode(root, gateScript, ['check', 'G5']);
     assert.notEqual(missing.status, 0);
-    assert.match(missing.stderr, /G6 is not approved/);
+    assert.match(missing.stderr, /G5 is not approved/);
 
-    const approve = runNode(root, gateScript, ['approve', 'G6', '--note', 'plan reviewed']);
+    const approve = runNode(root, gateScript, ['approve', 'G5', '--note', 'backlog reviewed']);
     assert.equal(approve.status, 0, approve.stderr || approve.stdout);
 
-    const check = runNode(root, gateScript, ['check', 'G6']);
+    const check = runNode(root, gateScript, ['check', 'G5']);
     assert.equal(check.status, 0, check.stderr || check.stdout);
-    assert.match(check.stdout, /G6 approved/);
+    assert.match(check.stdout, /G5 approved/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -306,11 +306,16 @@ test('gate script scopes approval to a subject so a stale global approval from o
     const approveE1 = runNode(root, gateScript, ['approve', 'G6', '--subject', 'E-1', '--note', 'epic 1 plan approved']);
     assert.equal(approveE1.status, 0, approveE1.stderr || approveE1.stdout);
 
-    // The global bare check is satisfied (legacy behavior preserved)...
-    const bareCheck = runNode(root, gateScript, ['check', 'G6']);
-    assert.equal(bareCheck.status, 0, bareCheck.stderr || bareCheck.stdout);
+    const bareG6Check = runNode(root, gateScript, ['check', 'G6']);
+    assert.notEqual(bareG6Check.status, 0);
+    assert.match(bareG6Check.stderr, /G6.*--subject/);
 
-    // ...but a DIFFERENT epic's subject-scoped check must NOT ride on E-1's approval.
+    const approveG7 = runNode(root, gateScript, ['approve', 'G7', '--subject', 'E-1', '--note', 'epic 1 ready to merge']);
+    assert.equal(approveG7.status, 0, approveG7.stderr || approveG7.stdout);
+    const bareG7Check = runNode(root, gateScript, ['check', 'G7']);
+    assert.notEqual(bareG7Check.status, 0);
+    assert.match(bareG7Check.stderr, /G7.*--subject/);
+
     const checkE3 = runNode(root, gateScript, ['check', 'G6', '--subject', 'E-3']);
     assert.notEqual(checkE3.status, 0);
     assert.match(checkE3.stderr, /not approved for E-3/);
@@ -327,6 +332,24 @@ test('gate script scopes approval to a subject so a stale global approval from o
 
     const list = runNode(root, gateScript, ['list']);
     assert.match(list.stdout, /G6: approved \(E-1: approved, E-3: approved\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate script next skips optional G1.5 while keeping it visible in list', () => {
+  const root = makeProject('gate-next-optional');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const approveG1 = runNode(root, gateScript, ['approve', 'G1', '--note', 'brief approved']);
+    assert.equal(approveG1.status, 0, approveG1.stderr || approveG1.stdout);
+
+    const next = runNode(root, gateScript, ['next']);
+    assert.equal(next.status, 0, next.stderr || next.stdout);
+    assert.match(next.stdout, /G2 pending/);
+
+    const list = runNode(root, gateScript, ['list']);
+    assert.match(list.stdout, /G1\.5: pending/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1578,6 +1601,18 @@ test('ship-feature exists alongside ship-epic and scopes G7 by feature slug inst
   assert.match(text, /name: ship-feature/);
   assert.match(text, /--subject <feature-slug>/);
   assert.match(text, /ensure-branch\.mjs --check-only/);
+});
+
+test('release skill requires project prerequisites and subject-scoped G7 for every release epic before G8', () => {
+  const text = readFileSync(join(repoRoot, 'skills/release/SKILL.md'), 'utf8');
+  assert.match(text, /gate\.mjs check G1/);
+  assert.match(text, /gate\.mjs check G2/);
+  assert.match(text, /gate\.mjs check G3/);
+  assert.match(text, /gate\.mjs check G4/);
+  assert.match(text, /gate\.mjs check G5/);
+  assert.match(text, /gate\.mjs check G7 --subject <epic-id>/);
+  assert.match(text, /each epic tagged.*release/i);
+  assert.match(text, /Before presenting for G8:[^\n]*G1[^\n]*G5[^\n]*subject-scoped G7/);
 });
 
 test('define-feature and implement-feature exist, standalone mode staying non-backlog-tracked like ship-feature', () => {
