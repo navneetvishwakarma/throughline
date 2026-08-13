@@ -160,7 +160,7 @@
       "prd_ref": "REQ-08",
       "acceptance": "Bare G6 and G7 checks exit non-zero with an actionable --subject error; gate next skips optional G1.5 when it is pending; and the release skill requires approved G1 through G5 plus subject-scoped G7 approval for every epic in the release before presenting G8.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 7,
       "verify": {
         "ci": "pass",
@@ -178,7 +178,7 @@
       ],
       "acceptance": "validate.mjs rejects epic or story prd_ref values that do not exist in the approved PRD, and rejects a release when any PRD requirement tagged for that release is absent from its backlog contract; every REQ-08 through REQ-16 requirement is referenced by E-2 and at least one E-2 story so V1 rollups cannot report completion while core capabilities are unevaluated.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 8,
       "verify": {
         "ci": "pass",
@@ -197,7 +197,7 @@
       ],
       "acceptance": "Configured coverage.stacks entries that do not match detected stack identifiers exit 2 instead of producing a skipped pass, and each executed custom or explicit target must create or update its declared summary during the current run; a successful command that leaves only a pre-existing report fails the coverage run.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 9,
       "verify": {
         "ci": "pass",
@@ -216,7 +216,7 @@
       ],
       "acceptance": "sync-plugin.mjs --apply installs the Throughline pre-commit hook only when no live hook exists or the live hook is already Throughline-managed; an unrelated custom hook remains byte-for-byte unchanged and is reported for manual composition, while --repair-state detects, reports, moves, and conflict-protects feature-* working directories under every unsupported platform root just as it does epic-* and ship-* state.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 10,
       "verify": {
         "ci": "pass",
@@ -231,7 +231,7 @@
       "prd_ref": "REQ-14",
       "acceptance": "check-docs.mjs rejects a PRD with zero valid requirement rows or malformed REQ-like rows, and an explicit architecture-tier check rejects template placeholder content in the system, stack, data, API, infrastructure, and ADR documents and requires a substantive security threat model so draft scaffolds cannot satisfy G4 validation.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 11,
       "verify": {
         "ci": "pass",
@@ -246,7 +246,7 @@
       "prd_ref": "REQ-16",
       "acceptance": "When a linked GitHub issue state changes from CLOSED to OPEN, sync-status.mjs moves its story from done to in_progress and recomputes dependency state so any story, including a previously done dependent, cannot remain complete while a blocked_by prerequisite is open.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 12,
       "verify": {
         "ci": "pass",
@@ -264,7 +264,7 @@
       ],
       "acceptance": "package.json and README declare a Node engine range compatible with c8 12 (^20.19.0 || ^22.12.0 || >=23), strict-engine installation rejects unsupported Node 18/19 before tool execution, and supported runtimes can install and run the test and coverage commands without engine conflicts.",
       "blocked_by": [],
-      "status": "in_progress",
+      "status": "done",
       "order": 13,
       "verify": {
         "ci": "pass",
