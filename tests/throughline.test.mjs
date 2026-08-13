@@ -494,6 +494,48 @@ test('validate.mjs rejects a story prd_ref absent from the approved PRD', () => 
   }
 });
 
+test('validate.mjs ignores REQ-like rows outside the PRD Requirements section', () => {
+  const root = makeProject('prd-traceability-section-boundary');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    const prdPath = join(root, 'docs/product/06-prd.md');
+    writeFileSync(prdPath, readFileSync(prdPath, 'utf8') + `
+## Appendix
+
+| ID | Note | Priority | Detail | Release |
+|---|---|---|---|---|
+| REQ-99 | Historical identifier | P0 | Not a product requirement | v1 |
+`, 'utf8');
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stderr + result.stdout, /REQ-99/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs reads a requirement release from the final table cell', () => {
+  const root = makeProject('prd-traceability-escaped-pipe');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    const prdPath = join(root, 'docs/product/06-prd.md');
+    writeFileSync(prdPath, readFileSync(prdPath, 'utf8').replace(
+      '| REQ-01 | Requirement REQ-01 | P0 | REQ-01 works | v1 |',
+      '| REQ-01 | Requirement REQ-01 | P0 | Contains no `\\|\\| true` bypass | v1 |',
+    ), 'utf8');
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog());
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate.mjs requires every release requirement in a same-release epic and story', () => {
   const root = makeProject('prd-release-traceability');
   try {

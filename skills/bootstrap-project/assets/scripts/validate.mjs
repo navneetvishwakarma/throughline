@@ -102,6 +102,29 @@ validateCoverage(data.coverage);
 
 if (!Array.isArray(data.epics)) err('epics must be an array');
 if (!Array.isArray(data.stories)) err('stories must be an array');
+function parsePrdRequirements(text) {
+  const rows = [];
+  let inRequirements = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^##\s+Requirements\s*$/i.test(line.trim())) {
+      inRequirements = true;
+      continue;
+    }
+    if (inRequirements && /^##\s+/.test(line.trim())) break;
+    if (inRequirements && line.trim().startsWith('|')) rows.push(line);
+  }
+  const requirements = new Map();
+  for (const row of rows) {
+    const cells = row.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (!cells.length || !cells[0]) continue;
+    const [id] = cells;
+    const release = cells.at(-1);
+    if (/^ID$/i.test(id) || cells.every((cell) => /^:?-+:?$/.test(cell))) continue;
+    if (!REQ_RE.test(id)) continue;
+    requirements.set(id, release);
+  }
+  return requirements;
+}
 let prdApproved = false;
 let prdRequirements = new Map();
 if ((data.epics || []).length || (data.stories || []).length) {
@@ -111,10 +134,7 @@ if ((data.epics || []).length || (data.stories || []).length) {
     prdApproved = status === 'approved';
     if ((data.stories || []).length && !prdApproved) err('PRD must be approved before backlog contains stories');
     if (prdApproved) {
-      prdRequirements = new Map(prd.split(/\r?\n/).flatMap((line) => {
-        const row = line.match(/^\|\s*(REQ-[0-9]+)\s*\|.*\|\s*([^|\s]+)\s*\|\s*$/);
-        return row ? [[row[1], row[2]]] : [];
-      }));
+      prdRequirements = parsePrdRequirements(prd);
     }
   } catch (e) {
     err('cannot read PRD at ' + data.prd + ': ' + e.message);
