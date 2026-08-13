@@ -400,12 +400,17 @@ if (storyId) {
   if (!backlog) { console.error('Cannot read ' + backlogPath); process.exit(2); }
   const story = (backlog.stories || []).find((s) => s.id === storyId);
   if (!story) { console.error('Unknown story ' + storyId); process.exit(2); }
-  if (summary.aggregate.pct != null) {
+  if (summary.status === 'ok' && summary.passed === true && summary.aggregate.pct != null) {
     story.verify = { ...(story.verify || {}), coverage: Math.round(summary.aggregate.pct * 1000) / 1000 };
     writeJson(backlogPath, backlog);
     console.error('OK wrote verify.coverage=' + story.verify.coverage + ' for ' + storyId);
   } else {
-    console.error('No numeric coverage available for ' + storyId + ' (status=' + summary.status + '); verify.coverage left untouched.');
+    const action = summary.status !== 'ok'
+      ? 'Resolve every coverage target error or setup issue, then rerun the coverage check.'
+      : summary.passed !== true
+        ? 'Raise coverage to at least ' + (threshold * 100).toFixed(1) + '%, then rerun the coverage check.'
+        : 'Produce a numeric coverage report, then rerun the coverage check.';
+    console.error('verify.coverage left untouched for ' + storyId + ' (status=' + summary.status + ', passed=' + summary.passed + '). ' + action);
   }
 }
 

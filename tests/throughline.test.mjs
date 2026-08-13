@@ -907,6 +907,70 @@ test('coverage.mjs runs the real run/parse/aggregate/--story chain end to end vi
   }
 });
 
+test('coverage.mjs does not write story evidence from a partial multi-target result', () => {
+  const root = makeProject('coverage-story-partial-targets');
+  try {
+    mkdirSync(join(root, 'apps/backend'), { recursive: true });
+    mkdirSync(join(root, 'apps/mobile'), { recursive: true });
+    writeFileSync(join(root, 'apps/backend/write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 80 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: {
+        mode: 'enforce', min: 0.7,
+        targets: [
+          { id: 'backend', cwd: 'apps/backend', command: 'node write-coverage.mjs', summary: 'coverage/coverage-summary.json' },
+          { id: 'mobile', cwd: 'apps/mobile', command: 'node -e "process.exit(1)"', summary: 'coverage/coverage-summary.json' },
+        ],
+      },
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'in_progress', order: 0,
+        verify: { ci: 'pass', commit: 'abc123' },
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--story', 'S-1', '--check']);
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    const story = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8')).stories[0];
+    assert.equal(Object.hasOwn(story.verify, 'coverage'), false, 'partial coverage must not become story evidence');
+    assert.match(result.stderr, /verify\.coverage left untouched.*status=error.*passed=false/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs leaves existing story evidence unchanged when numeric coverage is below threshold', () => {
+  const root = makeProject('coverage-story-below-threshold');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 50 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      coverage: { mode: 'enforce', min: 0.7, command: 'node write-coverage.mjs' },
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01',
+        acceptance: 'The app shell renders.', blocked_by: [], status: 'in_progress', order: 0,
+        verify: { ci: 'pass', commit: 'abc123', coverage: 0.9 },
+      }],
+    }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--story', 'S-1', '--check']);
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    const story = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8')).stories[0];
+    assert.equal(story.verify.coverage, 0.9, 'failed coverage must not replace existing evidence');
+    assert.match(result.stderr, /verify\.coverage left untouched.*status=ok.*passed=false/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('coverage.mjs exits 2 for an unknown coverage.mode, never treating a typo as off', () => {
   const root = makeProject('coverage-runtime-bad-mode');
   try {
