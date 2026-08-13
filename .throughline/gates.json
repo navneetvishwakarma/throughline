@@ -7,8 +7,8 @@
     },
     "G2": {
       "status": "approved",
-      "note": "PRD approved: REQ-01..REQ-07",
-      "updatedAt": "2026-08-12T16:24:32.742Z"
+      "note": "REQ-08..REQ-16 retroactive backfill approved (0.1.0-0.3.1 baseline documented)",
+      "updatedAt": "2026-08-13T07:44:16.548Z"
     },
     "G5": {
       "status": "approved",
