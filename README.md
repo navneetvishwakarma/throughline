@@ -193,7 +193,9 @@ The dashboard follows the same focus: its headline verdict and work board are sc
 
 ## Keeping a Project in Sync
 
-`bootstrap-project`/`adopt-project` run once and copy a snapshot of the plugin's scaffold (`scripts/*.mjs`, `docs/engineering/workflow.md`, `docs/_templates/*`, CI, hooks, `AGENTS.md`) into the project. That snapshot doesn't update itself — a project bootstrapped before a plugin release gained the coverage tooling, the design tier, or `measure-learn` stays frozen at its old version until something explicitly brings it forward.
+`bootstrap-project`/`adopt-project` run once and copy a snapshot of the plugin's scaffold (`scripts/*.mjs`, `docs/engineering/workflow.md`, `docs/_templates/*`, hooks, `AGENTS.md`) into the project. That snapshot doesn't update itself — a project bootstrapped before a plugin release gained the coverage tooling, the design tier, or `measure-learn` stays frozen at its old version until something explicitly brings it forward.
+
+`.github/workflows/throughline.yml` is the one exception to "snapshot copy": it's seed-only, project-owned scaffold, not a managed file. `sync-plugin.mjs` renders it once from whichever lockfile the project has (`pnpm-lock.yaml`/`package-lock.json`/`yarn.lock`) — never a byte-for-byte copy — and once it exists it's never overwritten and never shows up as needs-review, even if hand-edited. A later sync still reports whether it matches the current render (up to date / differs), just never touches it. A repo with no `package.json` yet defers seeding rather than baking in a workflow with no install step.
 
 `upgrade-project` is that something. It reads the currently installed plugin, classifies every platform-owned file in the project as added (new capability the project never had), unchanged, or needs-review (differs — could be normal drift or a deliberate local edit, never assumed), and applies the safe part automatically:
 
@@ -300,7 +302,22 @@ node scripts/coverage.mjs --setup   # nudge: add the missing tool for a repo tha
 node scripts/coverage.mjs --check   # non-zero exit if below threshold (what CI and ship-epic use)
 ```
 
-It also runs automatically inside `implement-epic` (writes `story.verify.coverage` from a real measured run — never hand-typed) and `ship-epic` (blocks the merge when `coverage.mode: enforce` and coverage is below threshold). The threshold and mode live in `backlog.json`'s `coverage` field (`min`, `mode: off|warn|enforce`); new projects seed `{ min: 0.7, mode: "warn" }` — measured and reported everywhere, nothing blocks until you flip `mode` to `"enforce"`. Absence of the `coverage` key means no enforcement at all, so installs that predate this feature are unaffected. Each stack's own standard report (`lcov.info`, `coverage.xml`, `jacoco.xml`, the Go cover profile) is kept on disk and uploaded as a CI artifact — no external account or server required, but any platform that ingests those formats can be pointed at it later.
+It also runs automatically inside `implement-epic` (writes `story.verify.coverage` from a real measured run — never hand-typed) and `ship-epic` (blocks the merge when `coverage.mode: enforce` and coverage is below threshold). The threshold and mode live in `backlog.json`'s `coverage` field (`min`, `mode: off|warn|enforce`); new projects seed `{ min: 0.7, mode: "warn" }` — measured and reported everywhere, nothing blocks until you flip `mode` to `"enforce"`. Absence of the `coverage` key means no enforcement at all, so installs that predate this feature are unaffected. An invalid `mode`, an out-of-range `min`, or an unknown `--threshold`/`--stack` fails loud with exit code 2 — never silently disabling enforcement. Each stack's own standard report (`lcov.info`, `coverage.xml`, `jacoco.xml`, the Go cover profile) is kept on disk and uploaded as a CI artifact — no external account or server required, but any platform that ingests those formats can be pointed at it later.
+
+**Monorepos.** Single-root auto-detection (the table above) only inspects the repo root, which misses workspace-level tools in a pnpm/npm/yarn monorepo. Declare explicit `coverage.targets` instead — every target runs, and results aggregate by total covered / total measurable lines (weighted, not an unweighted average of percentages):
+
+```json
+"coverage": {
+  "mode": "enforce",
+  "min": 0.7,
+  "targets": [
+    { "id": "backend", "cwd": "apps/backend", "command": "pnpm exec vitest run --coverage --coverage.reporter=json-summary", "summary": "coverage/coverage-summary.json" },
+    { "id": "mobile", "cwd": "apps/mobile", "command": "pnpm exec jest --coverage --coverageReporters=json-summary", "summary": "coverage/coverage-summary.json" }
+  ]
+}
+```
+
+`cwd` is relative to the repo root; `summary`/`lcov` are relative to `cwd`. Neither can resolve outside the repo. `node scripts/coverage.mjs --stack backend` runs just one target. A target whose command fails, or whose declared report never appears, fails the run closed.
 
 ## Doc-Tier Structural Checks
 
