@@ -1775,7 +1775,10 @@ test('sync-plugin.mjs recomputes legacyContractGrace on a later --apply once bac
 
     approvePrd(root);
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
-      stories: [{ id: 'S-1', title: 'Reconciled from GH issue', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0, gh_issue: 12 }],
+      stories: [
+        { id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: [], status: 'notstarted', order: 0 },
+        { id: 'S-2', title: 'Reconciled from GH issue', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 1, gh_issue: 12 },
+      ],
     }));
     const second = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
     assert.equal(second.status, 0, second.stderr || second.stdout);
