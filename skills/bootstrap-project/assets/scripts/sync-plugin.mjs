@@ -159,10 +159,12 @@ const FILES = [
   'scripts/build-dashboard.mjs',
   'scripts/coverage.mjs',
   'scripts/check-docs.mjs',
+  'scripts/bump-version.mjs',
   'scripts/ensure-branch.mjs',
   'scripts/init-project.mjs',
   'scripts/sync-plugin.mjs',
   'scripts/lib/render-workflow.mjs',
+  'scripts/lib/versioning.mjs',
   'docs/engineering/workflow.md',
   'docs/engineering/backlog.schema.json',
   'docs/engineering/backlog.seed.json',
@@ -243,7 +245,14 @@ if (apply && existsSync(join(root, '.git')) && existsSync(join(root, '.githooks/
   const historicalManagedHooks = new Set([
     '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n',
   ]);
-  const managedHook = liveHook === currentHook || historicalManagedHooks.has(liveHook);
+  // Line-ending differences alone must not change managed-hook ownership: a CRLF-saved copy
+  // of a known hook is still that hook. Normalize only for this ownership decision -- the
+  // byte-exact liveHook !== currentHook checks below (which gate whether a write happens)
+  // stay exact, since a write should still fire whenever live bytes differ from canonical.
+  const toLf = (s) => (s == null ? s : s.replace(/\r\n/g, '\n'));
+  const normalizedLiveHook = toLf(liveHook);
+  const managedHook = normalizedLiveHook === toLf(currentHook)
+    || [...historicalManagedHooks].some((h) => toLf(h) === normalizedLiveHook);
   if (liveHook == null) {
     mkdirSync(dirname(hookDest), { recursive: true });
     copyFileSync(hookSrc, hookDest);

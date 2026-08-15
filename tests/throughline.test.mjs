@@ -1964,6 +1964,54 @@ test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook',
   }
 });
 
+test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook saved with CRLF line endings', () => {
+  const root = makeProject('sync-managed-hook-crlf');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfHistoricalHook = '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfHistoricalHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('scripts/sync-plugin.mjs and the bootstrap scaffold copy normalize CRLF historical hooks identically', () => {
+  const root = makeProject('sync-managed-hook-crlf-parity');
+  try {
+    assert.equal(
+      readFileSync(join(repoRoot, 'scripts/sync-plugin.mjs'), 'utf8'),
+      readFileSync(join(assetsRoot, 'scripts/sync-plugin.mjs'), 'utf8'),
+      'scripts/sync-plugin.mjs and the bootstrap scaffold copy must stay byte-identical'
+    );
+
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    // Overwrite the fixture's bundled copy (normally sourced from assetsRoot) with the
+    // real top-level scripts/sync-plugin.mjs, so this test exercises that file directly
+    // instead of the assets copy every other test in this file runs against.
+    copyFileSync(join(repoRoot, 'scripts/sync-plugin.mjs'), join(root, 'scripts/sync-plugin.mjs'));
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfHistoricalHook = '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfHistoricalHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('sync-plugin.mjs installs a pre-commit hook for the first time, not just refreshes an existing one', () => {
   const root = makeProject('sync-hook-first-install');
   try {
