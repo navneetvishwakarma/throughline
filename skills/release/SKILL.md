@@ -23,7 +23,7 @@ Build the changelog from the `backlog.json` epic slice + `.throughline/epic-*/le
 3. **QA pass** — run the integration/E2E test suite. Read and execute `docs/MANUAL-TESTS.md` for any manual checks. Block on any failure.
 4. **Changelog** — generate a `CHANGELOG.md` entry from the shipped epics' titles and ledger summaries. Write user-facing release notes (no internal jargon).
 5. **Security final pass** — check for exposed secrets, new attack surface, and any open compliance items. Flag must-fix issues; block go if present.
-6. **Tag + deploy** — `git tag vX`, then run the deploy checklist (`engineering:deploy-checklist` if available, otherwise the project's deploy procedure).
+6. **Resolve the version, tag, deploy** — run `node scripts/bump-version.mjs` (report-only) to see the current version and, if `backlog.json`'s `versioning.bump` is `conventional-commits` or `epic-driven`, a suggested next one. Present the resolved number to the user at G8 alongside the changelog — never apply a suggestion silently. Once confirmed, run `node scripts/bump-version.mjs --set=<X.Y.Z> --apply` (writes `package.json`, `versioning.current`, and any `versioning.targets`), `git tag v<X.Y.Z>`, then run the deploy checklist (`engineering:deploy-checklist` if available, otherwise the project's deploy procedure). No `versioning` block in `backlog.json` means unmanaged — tag whatever the human decides, same as before this feature existed.
 7. **Refresh dashboard** — run `node scripts/sync-status.mjs && node scripts/build-dashboard.mjs`.
 8. **Announcement** — draft the user-facing announcement / stakeholder update. Optionally generate marketing release notes.
 9. **Hand off to measure & learn** — wire analytics for new features, schedule a metrics review (30-day minimum), and set up ops health monitoring (errors, latency, incidents). Record proceed/pivot/kill criteria in the brief for the next cycle.
@@ -32,10 +32,10 @@ Build the changelog from the `backlog.json` epic slice + `.throughline/epic-*/le
 `CHANGELOG.md` entry, version tag, deployed build, refreshed `PROGRESS_DASHBOARD.html`, announcement draft.
 
 ## Automated gate
-Before presenting for G8: G1 through G5 approved; subject-scoped G7 approved for every release epic; all release epics `done`; QA pass green; changelog generated; security pass clear (or must-fixes resolved); deploy succeeded; `node scripts/build-dashboard.mjs` exits 0.
+Before presenting for G8: G1 through G5 approved; subject-scoped G7 approved for every release epic; all release epics `done`; QA pass green; changelog generated; security pass clear (or must-fixes resolved); if `backlog.json` has a `versioning` block, `node scripts/bump-version.mjs` resolved a version without error (`--apply` refuses a version that isn't strictly greater than the current one, so this can't silently regress); deploy succeeded; `node scripts/build-dashboard.mjs` exits 0.
 
 ## Gate (G8)
-Present the QA summary, changelog, and security check result, plus `Personas Applied: PM, Security`. Ask the user for go/no-go. On go, confirm the tag is pushed and the deployment is live. This line stays in the presentation only — `CHANGELOG.md` is user-facing release notes and never carries internal process metadata.
+Present the QA summary, changelog, resolved version number, and security check result, plus `Personas Applied: PM, Security`. Ask the user for go/no-go. On go, confirm the tag is pushed and the deployment is live. This line stays in the presentation only — `CHANGELOG.md` is user-facing release notes and never carries internal process metadata.
 
 ## Done when
 Version tagged + deployed; changelog + announcement produced; dashboard current; measure-and-learn scheduled; G8 approved.

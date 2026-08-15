@@ -280,6 +280,78 @@ Epic planning and ship state live under:
 .throughline/ship-<n>/
 ```
 
+## Technical & Architecture Debt
+
+`backlog.json` only accepts stories that trace to a real `REQ-xx` in the approved PRD —
+`scripts/validate.mjs` enforces it — so there's no side door for logging debt directly
+into the contract, and there shouldn't be: an item nobody can trace to a requirement is
+exactly what the contract is designed to keep out.
+
+Three places handle debt, by kind:
+
+- **Architecture-driven** — when `define-architecture`'s reconcile pass classifies a new
+  requirement as a breaking/structural revision, it already emits a migration story
+  straight into `define-backlog`'s next reconcile pass (never hand-typed into
+  `backlog.json`). `define-backlog` sets `breaking: true` on the epic that carries it,
+  which also feeds `scripts/bump-version.mjs`'s `epic-driven` mode (see
+  [Versioning](#versioning)).
+- **Foundational, not yet in the PRD** — cluster it into a `vertical: false` enabler epic
+  the same way `bootstrap-project`'s seeded Foundation epic works, once it has a `REQ-xx`.
+  Throughline's own backlog does this: `E-1` ("Truthful coverage and scaffold
+  synchronization") is `vertical: false`, tracing to `REQ-01`–`REQ-07`.
+- **Not yet worth a requirement** — keep it in `docs/engineering/tech-debt.md` (seeded by
+  `bootstrap-project`/`adopt-project`, populated by hand or with the
+  `engineering:tech-debt` skill). It's not gated and not validated by
+  `scripts/check-docs.mjs` — a scratch register for triage, not a doc tier. When an entry
+  is worth scheduling, `define-product` adds it as a new `REQ-xx` (reconcile mode, same
+  append-only rule as any other requirement) and moves the row from Open to Promoted;
+  `define-backlog` then picks it up like any other requirement.
+
+## Versioning
+
+`backlog.json`'s optional `versioning` block controls how a release's version number is
+chosen. Absence means unmanaged, same as before this feature existed: the human just
+tags whatever they want.
+
+```json
+"versioning": {
+  "scheme": "semver",
+  "bump": "manual",
+  "current": "0.3.2"
+}
+```
+
+`bump` is the policy:
+
+- `manual` (default) — `scripts/bump-version.mjs --apply` refuses to write anything
+  without an explicit `--set=X.Y.Z`. Nothing is inferred.
+- `conventional-commits` — suggests a level from commit subjects/bodies since the last
+  tag (`BREAKING CHANGE` or a `!` before the colon → major, `feat:` → minor, else patch).
+- `epic-driven` — suggests major when any epic in `release_in_flight` carries
+  `breaking: true` (set by `define-backlog` when it intakes a migration story
+  `define-architecture` flagged as a breaking/structural revision — see
+  [Technical & Architecture Debt](#technical--architecture-debt)), else minor.
+
+```bash
+node scripts/bump-version.mjs                       # report current version + suggestion, writes nothing
+node scripts/bump-version.mjs --set=1.2.0            # always allowed — the whole of manual mode
+node scripts/bump-version.mjs --set=1.2.0 --apply    # write package.json + versioning.current
+```
+
+`--apply` refuses a version that isn't strictly greater than the current one — a re-run
+can't silently re-stamp the same number as if it were new. `release` (G8) runs this at
+the version-tag step and presents the resolved number to the human alongside the
+changelog; the gate confirms the number, it never rubber-stamps it.
+
+`versioning.targets` keeps other files in lockstep with `package.json`'s version the same
+way `coverage.targets` keeps a monorepo's coverage runs in lockstep — every target is
+either `kind: "json"` (a dot `jsonPath` into a JSON file) or `kind: "text"` (a regex
+`pattern` with one capture group). Throughline's own `backlog.json` uses this to keep
+`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (both version fields),
+`.codex-plugin/plugin.json`, and this README's own `Version:` line in sync with
+`package.json` on every bump — the four/five-file manual edit this repo's own release
+process used to require.
+
 ## Coverage
 
 Coverage is auto-detected per stack and measured with each stack's own established tool — never a reinvented one:
