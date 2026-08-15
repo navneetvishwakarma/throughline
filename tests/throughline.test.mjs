@@ -2002,6 +2002,30 @@ test('sync-plugin.mjs does not let CRLF normalization turn a composed hook into 
   }
 });
 
+test('a CRLF-recognized refreshed pre-commit hook still fails fast and rejects a commit on main', () => {
+  const root = makeProject('pre-commit-crlf-backstop');
+  try {
+    initGitWithCommit(root);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfHistoricalHook = '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfHistoricalHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
+    try { chmodSync(hookPath, 0o755); } catch {}
+
+    writeFileSync(join(root, 'change.txt'), 'change\n', 'utf8');
+    spawnSync('git', ['add', 'change.txt'], { cwd: root, encoding: 'utf8' });
+    const blocked = spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'change on main'], { cwd: root, encoding: 'utf8' });
+    assert.notEqual(blocked.status, 0, 'a refreshed CRLF-recognized hook must still reject a commit on main, not mask the branch check');
+    assert.match(blocked.stderr + blocked.stdout, /never commits directly to main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('scripts/sync-plugin.mjs and the bootstrap scaffold copy normalize CRLF historical hooks identically', () => {
   const root = makeProject('sync-managed-hook-crlf-parity');
   try {
