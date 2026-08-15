@@ -536,7 +536,7 @@ test('validate.mjs reads a requirement release from the final table cell', () =>
   }
 });
 
-test('validate.mjs requires every release requirement in a same-release epic and story', () => {
+test('validate.mjs leaves an unrepresented future release unenforced, then activates full epic/story coverage checks once the first epic for that release exists', () => {
   const root = makeProject('prd-release-traceability');
   try {
     writeApprovedPrd(root, [
@@ -544,6 +544,24 @@ test('validate.mjs requires every release requirement in a same-release epic and
       { id: 'REQ-02', release: 'v2' },
     ]);
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v1' }));
+
+    // No v2 epic yet -- REQ-02 (v2) is not represented in the backlog, so it must not invalidate it.
+    const unrepresented = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(unrepresented.status, 0, unrepresented.stderr || unrepresented.stdout);
+
+    // First v2 epic exists but doesn't reference REQ-02 -- activation: now it must hard-fail.
+    const epicsMissingRef = [
+      { id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' },
+      { id: 'E-2', title: 'Second release', order: 1, release: 'v2' },
+    ];
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics: epicsMissingRef,
+      stories: [
+        ...baseBacklog().stories,
+        { id: 'S-2', title: 'Second release placeholder', epic: 'E-2', prd_ref: 'REQ-01', acceptance: 'The work ships.', blocked_by: [], status: 'notstarted', order: 1 },
+      ],
+    }));
 
     const missingEpic = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.notEqual(missingEpic.status, 0);
@@ -577,6 +595,78 @@ test('validate.mjs requires every release requirement in a same-release epic and
 
     const complete = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.equal(complete.status, 0, complete.stderr || complete.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs downgrades a represented release story-coverage gap to WARN under legacyContractGrace only when a legacy story without prd_ref sits under the release epic, hard-failing the same data without grace', () => {
+  const root = makeProject('release-traceability-legacy-grace');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    const epics = [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' }];
+    // A legacy story with no prd_ref sits under E-1's release epic, but nothing traces REQ-01 to a story.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        { id: 'S-1', title: 'Old story, no trace', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 },
+      ],
+    }));
+
+    const withoutGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withoutGrace.status, 0);
+    assert.match(withoutGrace.stderr, /REQ-01 \(release v1\) is not referenced by any story in its release epic/);
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(withGrace.status, 0, withGrace.stderr || withGrace.stdout);
+    assert.match(withGrace.stdout, /REQ-01 \(release v1\) is not referenced by any story in its release epic/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs never downgrades a release story-coverage gap under legacyContractGrace when no story without prd_ref exists in the release epic (a genuine gap, not a legacy backfill)', () => {
+  const root = makeProject('release-traceability-legacy-grace-no-candidate');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }, { id: 'REQ-02', release: 'v1' }]);
+    const epics = [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: ['REQ-01', 'REQ-02'], release: 'v1' }];
+    // Every story under E-1 has a prd_ref -- none is a plausible legacy story for REQ-02.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        { id: 'S-1', title: 'Traced', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 },
+      ],
+    }));
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withGrace.status, 0);
+    assert.match(withGrace.stderr, /REQ-02 \(release v1\) is not referenced by any story in its release epic/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs hard-fails a dangling prd_ref regardless of legacyContractGrace', () => {
+  const root = makeProject('release-traceability-dangling-ref-grace');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-999', release: 'v1' }],
+      stories: [{ id: 'S-1', title: 'Bad ref', epic: 'E-1', prd_ref: 'REQ-999', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 }],
+    }));
+
+    const withoutGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withoutGrace.status, 0);
+    assert.match(withoutGrace.stderr, /prd_ref 'REQ-999' does not exist in the approved PRD/);
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withGrace.status, 0);
+    assert.match(withGrace.stderr, /prd_ref 'REQ-999' does not exist in the approved PRD/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
