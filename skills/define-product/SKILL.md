@@ -33,6 +33,7 @@ Run `node scripts/ensure-branch.mjs --skill=define-product` before anything else
 | Reworded, same intent | Edit the existing `REQ-xx` row in place; id and `Release` tag stay untouched. |
 | Materially changed behavior of a shipped requirement | **Never edit the shipped `REQ-xx`.** Add a new `REQ-xx` describing the change, tagged to the new release, and note in its acceptance line which prior requirement it supersedes. |
 | Requirement removed / no longer wanted | **Flag** for the human; do not delete the row. Mark it superseded in the Acceptance column rather than erasing history. |
+| Promoted from `docs/engineering/tech-debt.md` | Append a new `REQ-xx` describing the debt item as a requirement, tagged to the current `Release`. Then move the row from Open to Promoted in `tech-debt.md`, linking the new `REQ-xx` — the register is scratch space, not the contract, so the promotion has to leave a trace on both sides. |
 
 **Worked v2 example:** shipped PRD has `REQ-01`..`REQ-12` (no `Release` column values — implicitly v1). A v2 pass adds `REQ-13: Recurring segments (Release: v2)` and `REQ-14: Extend manual-add to support recurring segments (Release: v2) — supersedes REQ-04's one-time-only behavior`. `REQ-04` itself is never edited. Only `REQ-13`/`REQ-14` need a fresh `status: approved` — the PRD's front-matter stays `approved` throughout; it's the new rows that get sign-off, not the whole document.
 

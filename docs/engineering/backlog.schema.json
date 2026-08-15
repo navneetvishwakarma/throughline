@@ -55,6 +55,29 @@
         }
       }
     },
+    "versioning": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional release-versioning policy for scripts/bump-version.mjs. Absence means unmanaged (backward-compatible with installs that predate this feature): 'release' still tags whatever the human types, nothing computes or enforces a number. package.json's version field stays authoritative; 'current' here is a mirror kept in lockstep by scripts/bump-version.mjs --apply.",
+      "properties": {
+        "scheme": { "enum": ["semver"], "default": "semver" },
+        "bump": { "enum": ["manual", "conventional-commits", "epic-driven"], "default": "manual", "description": "manual = scripts/bump-version.mjs never guesses; --apply requires an explicit --set=X.Y.Z. conventional-commits = suggests a level from commit subjects/bodies since the last tag (BREAKING CHANGE or a '!' before the colon -> major, 'feat:' -> minor, else patch). epic-driven = suggests major when any epic in release_in_flight carries breaking: true, else minor." },
+        "current": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$", "description": "Last version scripts/bump-version.mjs --apply wrote. Informational; package.json is authoritative." },
+        "targets": {
+          "type": "array",
+          "description": "Extra files scripts/bump-version.mjs --apply keeps in lockstep with package.json's version (e.g. a second plugin manifest). Mirrors coverage.targets' shape: every target is applied, none are optional.",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "kind"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1, "description": "Relative to the repo root; cannot resolve outside it." },
+              "kind": { "enum": ["json", "text"] },
+              "jsonPath": { "type": "string", "minLength": 1, "description": "Dot path into the JSON file, e.g. 'version' or 'plugins.0.version'. Required when kind is 'json'." },
+              "pattern": { "type": "string", "minLength": 1, "description": "Regex with exactly one capture group locating the version substring. Required when kind is 'text'." }
+            }
+          }
+        }
+      }
+    },
     "phases": {
       "type": "array",
       "items": { "type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "order": { "type": "integer" } } }
@@ -76,6 +99,7 @@
         "target_date": { "type": "string", "description": "Optional target completion date YYYY-MM-DD; drives overdue detection." },
         "release": { "type": "string", "description": "Product release (v1/v2). Orthogonal to phase." },
         "vertical": { "type": "boolean", "default": true, "description": "false marks a foundational/enabler epic." },
+        "breaking": { "type": "boolean", "default": false, "description": "Set by define-backlog when intaking a migration story that define-architecture's reconcile pass flagged as a breaking/structural revision. Read by scripts/bump-version.mjs's epic-driven mode to suggest a major bump instead of re-deriving it from ADRs by hand." },
         "gh_issue": { "type": ["integer", "null"], "description": "Tracker issue number; only with a remote tracker." },
         "acceptance": { "type": "string" }
       }

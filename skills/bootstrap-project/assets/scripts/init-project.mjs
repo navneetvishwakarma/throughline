@@ -35,6 +35,7 @@ const generic = (n, title) => place(n, tpl('_doc.template.md', title));
 place('docs/product/06-prd.md', tpl('prd.template.md', 'Product Requirements'));
 place('docs/design/README.md', tpl('design-readme.template.md', 'Design'));
 place('docs/engineering/01-tech-plan.md', tpl('tech-plan.template.md', 'Technical Plan'));
+place('docs/engineering/tech-debt.md', tpl('tech-debt.template.md', 'Technical & Architecture Debt Register'));
 place('docs/architecture/decisions/ADR-0001-example.md', tpl('adr.template.md', 'Example Decision'));
 place('docs/design/tokens.md', tpl('design-tokens.template.md', 'Design Tokens'));
 place('docs/design/journeys/example-journey.md', tpl('journey.template.md', 'Example Journey'));

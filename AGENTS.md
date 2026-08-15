@@ -22,6 +22,8 @@ workflow skills in local mode — never hand-edit it casually.**
 - Scope (`id`, `title`, `order`, `phase`, `prd_ref`, `acceptance`, `blocked_by`): human + define skill.
 - `epic`, `gh_issue`: written back by the define/ship skill after the GH issue exists.
 - `status`, `verify`: status adapter + implement/ship evidence.
+- `epics[].breaking`: define-backlog, when intaking a migration story define-architecture flagged as breaking/structural.
+- `versioning.current`: `scripts/bump-version.mjs --apply` (run by release), never by hand — `package.json` stays authoritative.
 
 ## Workflow
 
@@ -36,7 +38,7 @@ never assume a gate is clear from how a doc reads.
 - `docs/product/` — PM (PRD is `06-prd.md`; requirements carry `REQ-xx` ids).
 - `docs/architecture/` — system/data/API/infra; ADRs in `decisions/`.
 - `docs/design/` — design system (tokens, components, UI kit).
-- `docs/engineering/` — `01-tech-plan.md`, the `backlog.json` contract, `workflow.md`.
+- `docs/engineering/` — `01-tech-plan.md`, the `backlog.json` contract, `workflow.md`, `tech-debt.md` (pre-backlog register — not part of the contract, see `## Tech & architecture debt` below).
 
 ## Commands
 
@@ -47,8 +49,19 @@ node scripts/gate.mjs check G6 --subject <epic-id>  # G6/G7 run per epic — alw
 node scripts/gate.mjs list        # show every gate's approval state
 node scripts/sync-status.mjs      # update local/GitHub status into the contract
 node scripts/coverage.mjs --check # verify coverage against threshold
+node scripts/bump-version.mjs     # resolve/apply the release version per versioning policy
 node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (zero tokens)
 ```
+
+## Tech & architecture debt
+
+`backlog.json` only accepts stories that trace to a real `REQ-xx` in the approved PRD
+(`scripts/validate.mjs` enforces it), so there is no side door for logging debt straight
+into the contract. Architecture-driven debt (a breaking/structural revision) already has
+a channel: `define-architecture`'s reconcile pass emits a migration story, flagged
+`breaking: true`, straight into `define-backlog`'s next reconcile pass. Anything else —
+not yet worth a requirement — goes in `docs/engineering/tech-debt.md` (not gated, not
+validated) until `define-product` promotes a row to a real `REQ-xx`.
 
 ## Skill working state
 

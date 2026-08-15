@@ -159,6 +159,8 @@ dashboard and never stored.
 | story `verify.coverage` | `scripts/coverage.mjs`, invoked by implement-epic | Never hand-typed — patched from the measured summary via `--story <id>`. |
 | epic status / progress | derived | Computed by the dashboard from child stories. Never stored. |
 | `release_in_flight` | define-backlog | The release currently being worked. Advanced only here — in the same write as the first epic tagged to the new release — so it can never point at a release with no matching epic while other skills' gates run `validate.mjs` in between. |
+| `epics[].breaking` | define-backlog | Set true when intaking a migration story that `define-architecture`'s reconcile pass flagged as breaking/structural. Feeds `scripts/bump-version.mjs`'s `epic-driven` mode. |
+| `versioning.current` | `release`, via `scripts/bump-version.mjs --apply` | Mirrors `package.json`'s version; `package.json` stays authoritative. |
 
 ## Definition of Ready (a story may be picked up only if)
 
@@ -189,5 +191,6 @@ node scripts/validate.mjs         # gate: fails loud on a bad contract
 node scripts/gate.mjs list        # show human gate state — the authoritative source
 node scripts/sync-status.mjs      # sync local/GitHub status into the contract
 node scripts/coverage.mjs --check # verify coverage against threshold
+node scripts/bump-version.mjs     # resolve/apply the release version per versioning policy (release, G8)
 node scripts/build-dashboard.mjs  # render PROGRESS_DASHBOARD.html (work board + Planning section)
 ```
