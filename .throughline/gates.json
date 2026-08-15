@@ -33,9 +33,9 @@
       }
     },
     "G7": {
-      "status": "rejected",
-      "note": "scope reopened for S-15 through S-18; new merge review required",
-      "updatedAt": "2026-08-13T15:17:30.370Z",
+      "status": "approved",
+      "note": "local epic merge approved",
+      "updatedAt": "2026-08-15T15:35:37.891Z",
       "subjects": {
         "E-1": {
           "status": "approved",
@@ -53,9 +53,9 @@
           "updatedAt": "2026-08-13T07:55:06.405Z"
         },
         "E-2": {
-          "status": "rejected",
-          "note": "scope reopened for S-15 through S-18; new merge review required",
-          "updatedAt": "2026-08-13T15:17:30.370Z"
+          "status": "approved",
+          "note": "local epic merge approved",
+          "updatedAt": "2026-08-15T15:35:37.891Z"
         }
       }
     }
