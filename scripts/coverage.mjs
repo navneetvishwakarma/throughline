@@ -81,6 +81,13 @@ if (thresholdArg != null) {
 }
 const stackAllowlist = coverageConfig?.stacks;
 
+// Off/warn modes report the real status and diagnostics but never block --
+// passed is only ever computed from status/threshold when mode is enforce.
+function passedFor(status, pct) {
+  if (resolvedMode !== 'enforce') return true;
+  return status === 'ok' && pct >= threshold;
+}
+
 // ---- istanbul-style json-summary reader (vitest/jest/c8) ----
 function readIstanbulSummary(relPath) {
   const data = readJson(join(root, relPath));
@@ -341,14 +348,14 @@ function loadExisting() {
 function reevaluate(existing) {
   const stacks = (existing.stacks || []).map((s) => ({
     ...s,
-    passed: s.status === 'ok' ? s.pct >= threshold : s.status === 'needs_setup' ? resolvedMode !== 'enforce' : false,
+    passed: passedFor(s.status, s.pct),
   }));
   const pct = existing.aggregate?.pct ?? null;
   const now = currentCommit();
   if (existing.commit && now && existing.commit !== now) {
     console.error('warning: reusing a coverage summary from commit ' + existing.commit + ', but HEAD is now ' + now + '. Re-run without --reuse if the code has changed.');
   }
-  return { ...existing, stacks, threshold, mode: resolvedMode, passed: stacks.every((s) => s.passed !== false) && (pct == null || pct >= threshold) };
+  return { ...existing, stacks, threshold, mode: resolvedMode, passed: stacks.every((s) => s.passed !== false) && (resolvedMode !== 'enforce' || pct == null || pct >= threshold) };
 }
 
 let summary;
@@ -359,24 +366,24 @@ if (doReuse) {
 } else {
   const results = stacks.map((stack) => {
     if (!stack.resolvable()) {
-      return { stack: stack.id, tool: stack.tool, status: 'needs_setup', hint: setupHintFor(stack), passed: resolvedMode !== 'enforce' };
+      return { stack: stack.id, tool: stack.tool, status: 'needs_setup', hint: setupHintFor(stack), passed: passedFor('needs_setup', null) };
     }
     let runResult;
     try {
       if (stack.summaryPath) rmSync(join(root, stack.summaryPath), { force: true });
       runResult = stack.run();
-    } catch (e) { return { stack: stack.id, tool: stack.tool, status: 'error', message: String(e?.message || e), passed: false }; }
+    } catch (e) { return { stack: stack.id, tool: stack.tool, status: 'error', message: String(e?.message || e), passed: passedFor('error', null) }; }
     if (!ok(runResult)) {
-      return { stack: stack.id, tool: stack.tool, status: 'error', message: (runResult.stderr || runResult.stdout || 'command failed').slice(0, 2000), passed: false };
+      return { stack: stack.id, tool: stack.tool, status: 'error', message: (runResult.stderr || runResult.stdout || 'command failed').slice(0, 2000), passed: passedFor('error', null) };
     }
     let parsed;
     try { parsed = stack.report(); } catch { parsed = null; }
-    if (!parsed) return { stack: stack.id, tool: stack.tool, status: 'error', message: 'coverage ran but no report found at ' + (stack.summaryPath || stack.reportPath), passed: false };
+    if (!parsed) return { stack: stack.id, tool: stack.tool, status: 'error', message: 'coverage ran but no report found at ' + (stack.summaryPath || stack.reportPath), passed: passedFor('error', null) };
     return {
       stack: stack.id, tool: stack.tool, status: 'ok',
       reportFormat: stack.reportFormat, reportPath: stack.reportPath,
       covered: parsed.covered, total: parsed.total, pct: parsed.pct,
-      passed: parsed.pct >= threshold,
+      passed: passedFor('ok', parsed.pct),
     };
   });
   const okResults = results.filter((r) => r.status === 'ok');
@@ -389,7 +396,7 @@ if (doReuse) {
   summary = {
     generatedAt: new Date().toISOString(), status, stacks: results, commit: currentCommit(),
     aggregate: { pct: aggregatePct }, threshold, mode: resolvedMode,
-    passed: results.every((r) => r.passed !== false) && (aggregatePct == null || aggregatePct >= threshold),
+    passed: results.every((r) => r.passed !== false) && (resolvedMode !== 'enforce' || aggregatePct == null || aggregatePct >= threshold),
   };
   writeJson(summaryPath, summary);
 }

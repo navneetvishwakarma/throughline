@@ -4,7 +4,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, r
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const assetsRoot = join(repoRoot, 'skills/bootstrap-project/assets');
@@ -1309,6 +1309,143 @@ test('coverage.mjs treats mode off and warn as non-blocking only when spelled co
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'Off', min: 0.99, command: 'node write-coverage.mjs' } }));
     const wrongCase = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
     assert.equal(wrongCase.status, 2, wrongCase.stderr || wrongCase.stdout, 'a mode typo must never silently behave like off');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports a below-threshold stack as passed:true in off mode', () => {
+  const root = makeProject('coverage-mode-off-stack-passed');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'off', min: 0.99, command: 'node write-coverage.mjs' } }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks[0].status, 'ok');
+    assert.equal(summary.stacks[0].pct, 0.01, 'the real below-threshold pct must still be reported truthfully');
+    assert.equal(summary.stacks[0].passed, true, 'off mode must not let a below-threshold stack report passed:false');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports summary.passed true in off and warn mode when aggregate is below threshold, including after --reuse', () => {
+  const root = makeProject('coverage-mode-nonblocking-aggregate');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'off', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const off = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(off.status, 0, off.stderr || off.stdout);
+    assert.equal(JSON.parse(off.stdout).passed, true);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const warn = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(warn.status, 0, warn.stderr || warn.stdout);
+    assert.equal(JSON.parse(warn.stdout).passed, true);
+
+    // Write a real below-threshold summary under enforce, then reuse it after switching to warn.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforce', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const enforceRun = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(JSON.parse(enforceRun.stdout).passed, false, 'sanity: enforce mode must still fail this fixture');
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const reused = runNode(root, join(root, 'scripts/coverage.mjs'), ['--reuse', '--json']);
+    assert.equal(reused.status, 0, reused.stderr || reused.stdout);
+    const reusedSummary = JSON.parse(reused.stdout);
+    assert.equal(reusedSummary.stacks[0].pct, 0.01, 'reevaluate must keep reporting the real pct');
+    assert.equal(reusedSummary.stacks[0].passed, true);
+    assert.equal(reusedSummary.passed, true, '--reuse aggregate must also honor the current non-blocking mode');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports passed:true for an errored stack in off and warn mode while preserving status and diagnostics', () => {
+  const root = makeProject('coverage-mode-nonblocking-error');
+  try {
+    approvePrd(root);
+
+    for (const mode of ['off', 'warn']) {
+      writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+        coverage: { mode, min: 0.9, command: 'node -e "process.exit(1)"' },
+      }));
+      const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.status, 'error', 'mode=' + mode);
+      assert.equal(summary.stacks[0].status, 'error', 'mode=' + mode);
+      assert.ok(summary.stacks[0].message, 'mode=' + mode + ': error message must not be suppressed');
+      assert.equal(summary.stacks[0].passed, true, 'mode=' + mode);
+      assert.equal(summary.passed, true, 'mode=' + mode + ': an error must not become a blocking failure in a non-blocking mode');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs enforce mode still reports passed:false and exits non-zero for both below-threshold and errored stacks', () => {
+  const root = makeProject('coverage-mode-enforce-still-blocks');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforce', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const belowThreshold = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(belowThreshold.status, 0, belowThreshold.stderr || belowThreshold.stdout);
+    const belowThresholdSummary = JSON.parse(belowThreshold.stdout);
+    assert.equal(belowThresholdSummary.stacks[0].passed, false);
+    assert.equal(belowThresholdSummary.passed, false);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforce', min: 0.9, command: 'node -e "process.exit(1)"' } }));
+    const errored = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(errored.status, 0, errored.stderr || errored.stdout);
+    const erroredSummary = JSON.parse(errored.stdout);
+    assert.equal(erroredSummary.stacks[0].passed, false);
+    assert.equal(erroredSummary.passed, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rendered CI TAIL treats a non-blocking-mode coverage result as passing', async () => {
+  const root = makeProject('coverage-ci-tail-nonblocking');
+  try {
+    const { renderWorkflow } = await import(pathToFileURL(join(repoRoot, 'scripts/lib/render-workflow.mjs')).href);
+    const rendered = renderWorkflow(root);
+    const match = rendered.match(/node -e "\r?\n([\s\S]*?)\r?\n\s*"\r?\n\s*- uses: actions\/upload-artifact/);
+    assert.ok(match, 'could not locate the embedded coverage-evaluation node -e script in the rendered workflow TAIL');
+    const script = match[1];
+
+    // The extracted script hardcodes /tmp/coverage-summary.json -- point it at a fixture
+    // instead of relying on that path resolving usefully cross-platform.
+    const fixturePath = join(root, 'ci-tail-fixture.json').replace(/\\/g, '/');
+    const pointedScript = script.replaceAll('/tmp/coverage-summary.json', fixturePath);
+
+    // Shape coverage.mjs now actually produces for an off/warn-mode below-threshold run.
+    writeJson(join(root, 'ci-tail-fixture.json'), {
+      status: 'ok', passed: true, aggregate: { pct: 0.01 },
+      stacks: [{ stack: 'node-test', status: 'ok', pct: 0.01, passed: true }],
+    });
+
+    const run = spawnSync(process.execPath, ['-e', pointedScript], { cwd: root, encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -3021,6 +3158,321 @@ test('check-docs.mjs blanket mode does not enforce a tier until its own doc has 
     const blanketAfterApproval = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--json']);
     assert.equal(blanketAfterApproval.status, 1);
     assert.ok(JSON.parse(blanketAfterApproval.stdout).errors.some((e) => e.includes('missing Acceptance')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs accepts a versioning block and epics[].breaking, and rejects malformed versioning', () => {
+  const root = makeProject('versioning-valid');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { scheme: 'semver', bump: 'epic-driven', current: '1.0.0' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', breaking: true }],
+    }));
+    const ok = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'not-a-real-mode' },
+    }));
+    const badBump = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badBump.status, 0);
+    assert.match(badBump.stderr, /versioning\.bump must be one of/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { current: 'not-semver' },
+    }));
+    const badCurrent = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badCurrent.status, 0);
+    assert.match(badCurrent.stderr, /versioning\.current must be a semver string/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { targets: [{ path: '../outside.json', kind: 'json', jsonPath: 'version' }] },
+    }));
+    const badTarget = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badTarget.status, 0);
+    assert.match(badTarget.stderr, /must not resolve outside the repo/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', breaking: 'yes' }],
+    }));
+    const badBreaking = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badBreaking.status, 0);
+    assert.match(badBreaking.stderr, /breaking must be a boolean/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs manual mode: report-only writes nothing, --apply without --set fails, --set --apply writes package.json + versioning.current', () => {
+  const root = makeProject('bump-version-manual');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { scheme: 'semver', bump: 'manual', current: '1.0.0' },
+    }));
+
+    const report = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(report.status, 0, report.stderr || report.stdout);
+    assert.match(report.stdout, /report only: no files were written/);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '1.0.0');
+
+    const applyNoSet = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--apply']);
+    assert.equal(applyNoSet.status, 2, applyNoSet.stderr || applyNoSet.stdout);
+    assert.match(applyNoSet.stderr, /pass --set=X\.Y\.Z/);
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.1.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '1.1.0');
+    const backlogAfter = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    assert.equal(backlogAfter.versioning.current, '1.1.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs refuses to apply a version that is not strictly greater than the current one', () => {
+  const root = makeProject('bump-version-non-increasing');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '2.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ versioning: { bump: 'manual' } }));
+
+    const same = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=2.0.0', '--apply']);
+    assert.equal(same.status, 2);
+    assert.match(same.stderr, /is not greater than the current version/);
+
+    const lower = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.9.9', '--apply']);
+    assert.equal(lower.status, 2);
+    assert.match(lower.stderr, /is not greater than the current version/);
+
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '2.0.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs --apply propagates the resolved version to versioning.targets (json and text kinds)', () => {
+  const root = makeProject('bump-version-targets');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeJson(join(root, '.claude-plugin', 'plugin.json'), { name: 'fixture', version: '0.1.0' });
+    writeFileSync(join(root, 'README.md'), '# Fixture\n\n- Version: `0.1.0`\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        targets: [
+          { path: '.claude-plugin/plugin.json', kind: 'json', jsonPath: 'version' },
+          { path: 'README.md', kind: 'text', pattern: '- Version: `([0-9]+\\.[0-9]+\\.[0-9]+)`' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8')).version, '0.2.0');
+    assert.match(readFileSync(join(root, 'README.md'), 'utf8'), /Version: `0\.2\.0`/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs epic-driven mode suggests major when release_in_flight carries a breaking epic, minor otherwise', () => {
+  const root = makeProject('bump-version-epic-driven');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'epic-driven' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1', breaking: true }],
+    }));
+    const major = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(major.status, 0, major.stderr || major.stdout);
+    assert.match(major.stdout, /suggested: 2\.0\.0/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'epic-driven' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1' }],
+    }));
+    const minor = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(minor.status, 0, minor.stderr || minor.stdout);
+    assert.match(minor.stdout, /suggested: 1\.1\.0/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs --apply preserves CRLF line endings instead of rewriting the whole file as LF', () => {
+  const root = makeProject('bump-version-crlf');
+  try {
+    writeFileSync(join(root, 'package.json'), '{\r\n  "name": "fixture",\r\n  "version": "1.0.0"\r\n}\r\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ versioning: { bump: 'manual' } }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.1.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+
+    const raw = readFileSync(join(root, 'package.json'), 'utf8');
+    assert.match(raw, /"version": "1\.1\.0"/);
+    assert.equal(/(?<!\r)\n/.test(raw), false, 'expected every line ending to stay CRLF, not be rewritten as bare LF');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs text targets replace only the captured span, not the first occurrence of the value anywhere in the match', () => {
+  const root = makeProject('bump-version-text-offset');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeFileSync(join(root, 'CHANGELOG.md'), 'AS OF 0.1.0, version: 0.1.0\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        targets: [
+          { path: 'CHANGELOG.md', kind: 'text', pattern: 'AS OF [0-9]+\\.[0-9]+\\.[0-9]+, version: ([0-9]+\\.[0-9]+\\.[0-9]+)' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), 'AS OF 0.1.0, version: 0.2.0\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs text targets reject a pattern with more than one capture group instead of silently no-opping', () => {
+  const root = makeProject('bump-version-text-multigroup');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeFileSync(join(root, 'VERSION.md'), 'Version: 0.1.0\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        targets: [
+          { path: 'VERSION.md', kind: 'text', pattern: 'Version:\\s*(x)?([0-9]+\\.[0-9]+\\.[0-9]+)' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 2, applied.stderr || applied.stdout);
+    assert.match(applied.stderr, /exactly one capture group/);
+    assert.equal(readFileSync(join(root, 'VERSION.md'), 'utf8'), 'Version: 0.1.0\n');
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '0.1.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs --apply writes nothing when a versioning.targets entry is invalid, even though package.json and backlog.json would otherwise be updated', () => {
+  const root = makeProject('bump-version-partial-write');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        current: '0.1.0',
+        targets: [
+          { path: 'MISSING.md', kind: 'text', pattern: '([0-9]+\\.[0-9]+\\.[0-9]+)' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 2, applied.stderr || applied.stdout);
+    assert.match(applied.stderr, /MISSING\.md.*does not exist/);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '0.1.0');
+    assert.equal(JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8')).versioning.current, '0.1.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs allows promoting a prerelease to its final release', () => {
+  const root = makeProject('bump-version-prerelease');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0-rc.1' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ versioning: { bump: 'manual' } }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.0.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '1.0.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs fails loud when backlog.json exists but fails to parse, instead of treating it as unmanaged', () => {
+  const root = makeProject('bump-version-corrupt-backlog');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeFileSync(join(root, 'docs/engineering/backlog.json'), '{ this is not valid json', 'utf8');
+
+    const report = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(report.status, 2, report.stderr || report.stdout);
+    assert.match(report.stderr, /backlog\.json exists but could not be parsed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs epic-driven mode stops suggesting major once the breaking epic is fully shipped', () => {
+  const root = makeProject('bump-version-epic-shipped');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'epic-driven' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1', breaking: true }],
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: [], status: 'done', order: 0,
+      }],
+    }));
+
+    const suggestion = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(suggestion.status, 0, suggestion.stderr || suggestion.stdout);
+    assert.match(suggestion.stdout, /suggested: 1\.1\.0/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("validate.mjs flags versioning.current drift from package.json's real version", () => {
+  const root = makeProject('versioning-drift');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.2.0' });
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { scheme: 'semver', bump: 'manual', current: '1.0.0' },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /versioning\.current .*does not match package\.json version/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('init-project.mjs materializes docs/engineering/tech-debt.md from the template', () => {
+  const root = makeProject('tech-debt-scaffold');
+  try {
+    const content = readFileSync(join(root, 'docs/engineering/tech-debt.md'), 'utf8');
+    assert.match(content, /Technical & Architecture Debt Register/);
+    assert.match(content, /## Open/);
+    assert.match(content, /## Promoted/);
+    assert.match(content, /## Resolved/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
