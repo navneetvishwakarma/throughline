@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T12:39:00.297Z",
+  "generatedAt": "2026-08-15T14:38:09.426Z",
   "status": "ok",
   "stacks": [
     {
@@ -8,15 +8,15 @@
       "status": "ok",
       "reportFormat": "lcov",
       "reportPath": "coverage/lcov.info",
-      "covered": 286,
-      "total": 350,
-      "pct": 0.8171428571428572,
+      "covered": 382,
+      "total": 446,
+      "pct": 0.8565022421524664,
       "passed": true
     }
   ],
-  "commit": "05f441cb6f692cb7728d34b24624007cd85bcd0c",
+  "commit": "dae05426781923328d64c14f3549e9b8e5e38f3c",
   "aggregate": {
-    "pct": 0.8171428571428572
+    "pct": 0.8565022421524664
   },
   "threshold": 0.7,
   "mode": "warn",

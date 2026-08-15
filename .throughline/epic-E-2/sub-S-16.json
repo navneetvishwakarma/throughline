@@ -1,0 +1,29 @@
+{
+  "id": "S-16",
+  "title": "Recognize CRLF historical hooks without overwriting custom checks",
+  "goal": "Upgrade Windows-managed Throughline hooks to fail-fast branch enforcement without mistaking project-owned hook composition for plugin ownership.",
+  "in_scope": [
+    "Normalize CRLF and LF line endings before matching known historical Throughline hook content",
+    "Refresh only exact normalized matches for current or known historical managed hooks",
+    "Preserve composed hooks that contain Throughline commands plus any additional executable project checks",
+    "Verify a refreshed historical hook cannot mask a failed branch check behind a later successful validator",
+    "Keep scripts/sync-plugin.mjs and the bootstrap scaffold copy behaviorally identical"
+  ],
+  "out_of_scope": [
+    "Parsing or rewriting arbitrary shell hook logic",
+    "Automatically composing unknown project hooks",
+    "Changing the seed-only policy for project-owned workflow files"
+  ],
+  "acceptance": "sync-plugin.mjs normalizes line endings when comparing a live pre-commit hook with every known Throughline-managed historical hook, so a CRLF copy refreshes to the current fail-fast hook while a composed or custom hook with any additional executable content remains byte-for-byte unchanged and is reported for manual review; the self-hosted and shipped scaffold copies behave identically.",
+  "invariants": [
+    "Line-ending differences alone do not change managed-hook ownership",
+    "Additional executable content always makes the live hook project-owned",
+    "Project-owned hooks are never overwritten without explicit force or manual action",
+    "Managed hooks stop on a failed protected-branch check"
+  ],
+  "prd_ref": [
+    "REQ-10",
+    "REQ-12",
+    "REQ-15"
+  ]
+}

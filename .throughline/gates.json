@@ -12,13 +12,13 @@
     },
     "G5": {
       "status": "approved",
-      "note": "V1 enhancements backlog approved from the 13 review findings: E-2 with seven grouped stories",
-      "updatedAt": "2026-08-13T08:35:49.127Z"
+      "note": "V1 enhancements backlog expanded to 18 stories under standing user approval",
+      "updatedAt": "2026-08-13T15:17:45.428Z"
     },
     "G6": {
       "status": "approved",
-      "note": "V1 enhancements epic plan approved",
-      "updatedAt": "2026-08-13T08:38:01.065Z",
+      "note": "expanded E-2 plan for S-15 through S-18 approved under standing user approval",
+      "updatedAt": "2026-08-13T15:17:45.622Z",
       "subjects": {
         "E-1": {
           "status": "approved",
@@ -27,15 +27,15 @@
         },
         "E-2": {
           "status": "approved",
-          "note": "V1 enhancements epic plan approved",
-          "updatedAt": "2026-08-13T08:38:01.065Z"
+          "note": "expanded E-2 plan for S-15 through S-18 approved under standing user approval",
+          "updatedAt": "2026-08-13T15:17:45.622Z"
         }
       }
     },
     "G7": {
-      "status": "approved",
-      "note": "local epic merge approved",
-      "updatedAt": "2026-08-13T13:20:01.631Z",
+      "status": "rejected",
+      "note": "scope reopened for S-15 through S-18; new merge review required",
+      "updatedAt": "2026-08-13T15:17:30.370Z",
       "subjects": {
         "E-1": {
           "status": "approved",
@@ -53,9 +53,9 @@
           "updatedAt": "2026-08-13T07:55:06.405Z"
         },
         "E-2": {
-          "status": "approved",
-          "note": "local epic merge approved",
-          "updatedAt": "2026-08-13T13:20:01.631Z"
+          "status": "rejected",
+          "note": "scope reopened for S-15 through S-18; new merge review required",
+          "updatedAt": "2026-08-13T15:17:30.370Z"
         }
       }
     }
