@@ -7,6 +7,38 @@
     "min": 0.7,
     "mode": "warn"
   },
+  "versioning": {
+    "scheme": "semver",
+    "bump": "manual",
+    "current": "0.3.2",
+    "targets": [
+      {
+        "path": ".claude-plugin/plugin.json",
+        "kind": "json",
+        "jsonPath": "version"
+      },
+      {
+        "path": ".claude-plugin/marketplace.json",
+        "kind": "json",
+        "jsonPath": "metadata.version"
+      },
+      {
+        "path": ".claude-plugin/marketplace.json",
+        "kind": "json",
+        "jsonPath": "plugins.0.version"
+      },
+      {
+        "path": ".codex-plugin/plugin.json",
+        "kind": "json",
+        "jsonPath": "version"
+      },
+      {
+        "path": "README.md",
+        "kind": "text",
+        "pattern": "- Version: `([0-9]+\\.[0-9]+\\.[0-9]+)`"
+      }
+    ]
+  },
   "phases": [],
   "epics": [
     {
@@ -42,7 +74,7 @@
         "REQ-15",
         "REQ-16"
       ],
-      "acceptance": "All thirteen V1 review findings are covered by implementation-ready stories and regression tests; release, coverage, document, synchronization, runtime, and traceability checks fail closed instead of accepting stale, malformed, incomplete, or unscoped state."
+      "acceptance": "All accepted V1 review findings are covered by implementation-ready stories and regression tests; release, coverage, document, synchronization, runtime, and traceability checks enforce their declared lifecycle semantics instead of accepting stale, malformed, incomplete, unscoped, or incorrectly blocking state."
     }
   ],
   "stories": [
@@ -270,6 +302,78 @@
         "ci": "pass",
         "commit": "1d1ef6b",
         "coverage": 0.817
+      }
+    },
+    {
+      "id": "S-15",
+      "title": "Make release traceability lifecycle-aware and legacy-compatible",
+      "epic": "E-2",
+      "prd_ref": [
+        "REQ-08",
+        "REQ-09"
+      ],
+      "acceptance": "validate.mjs treats release traceability completeness as mandatory only after that release is represented in the backlog, so define-product may add future-release PRD requirements before define-backlog creates their epics; once represented, every requirement for that release must resolve through an epic and story, except that legacyContractGrace downgrades rollup gaps caused by historical stories without prd_ref to warnings while dangling references and all non-legacy contract errors still fail.",
+      "blocked_by": [],
+      "status": "in_progress",
+      "order": 14,
+      "verify": {
+        "ci": "pass",
+        "commit": "b240a84",
+        "coverage": 0.817
+      }
+    },
+    {
+      "id": "S-16",
+      "title": "Recognize CRLF historical hooks without overwriting custom checks",
+      "epic": "E-2",
+      "prd_ref": [
+        "REQ-10",
+        "REQ-12",
+        "REQ-15"
+      ],
+      "acceptance": "sync-plugin.mjs normalizes line endings when comparing a live pre-commit hook with every known Throughline-managed historical hook, so a CRLF copy refreshes to the current fail-fast hook while a composed or custom hook with any additional executable content remains byte-for-byte unchanged and is reported for manual review; the self-hosted and shipped scaffold copies behave identically.",
+      "blocked_by": [],
+      "status": "in_progress",
+      "order": 15,
+      "verify": {
+        "ci": "pass",
+        "commit": "236f3c4",
+        "coverage": 0.817
+      }
+    },
+    {
+      "id": "S-17",
+      "title": "Make gate mutations and next fully subject-aware",
+      "epic": "E-2",
+      "prd_ref": "REQ-08",
+      "acceptance": "approve and reject require --subject for G6 and G7 and leave gate state unchanged when it is omitted; gate next skips G1.5 only while the optional gate is untouched and pending, surfaces an explicit G1.5 rejection, and derives G6/G7 readiness from subject-scoped decisions for every epic in the current release rather than stale global slots.",
+      "blocked_by": [],
+      "status": "in_progress",
+      "order": 16,
+      "verify": {
+        "ci": "pass",
+        "commit": "8b2f8e0",
+        "coverage": 0.817
+      }
+    },
+    {
+      "id": "S-18",
+      "title": "Make coverage result pass state honor non-blocking modes",
+      "epic": "E-2",
+      "prd_ref": [
+        "REQ-02",
+        "REQ-03",
+        "REQ-04",
+        "REQ-11"
+      ],
+      "acceptance": "coverage.mjs --json reports passed: true for off and warn modes even when an ok stack is below threshold or a stack errors, while enforce mode preserves the real threshold and error outcome; the same rule governs fresh per-stack results, --reuse reevaluation, and the aggregate summary in both the self-hosted and shipped scaffold copies, so rendered CI may trust summary.passed without turning a reporting mode into a blocking gate.",
+      "blocked_by": [],
+      "status": "in_progress",
+      "order": 17,
+      "verify": {
+        "ci": "pass",
+        "commit": "ed9995b",
+        "coverage": 0.857
       }
     }
   ]

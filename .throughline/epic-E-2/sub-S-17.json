@@ -1,0 +1,27 @@
+{
+  "id": "S-17",
+  "title": "Make gate mutations and next fully subject-aware",
+  "goal": "Ensure every gate mutation and next-step recommendation reflects the actual optional and per-epic lifecycle state.",
+  "in_scope": [
+    "Require --subject for approve and reject mutations of G6 and G7",
+    "Reject unscoped mutations before writing any gate state",
+    "Skip optional G1.5 only when it remains untouched and pending",
+    "Return rejected G1.5 as the next unresolved gate",
+    "Evaluate G6 and G7 across subject-scoped decisions for every epic in release_in_flight",
+    "Ignore stale global G6 and G7 slots when computing next",
+    "Keep scripts/gate.mjs and the bootstrap scaffold copy behaviorally identical"
+  ],
+  "out_of_scope": [
+    "Making G1.5 mandatory when it was intentionally omitted",
+    "Changing the meaning of approved, rejected, or pending for global gates",
+    "Adding remote tracker state as a second source of gate truth"
+  ],
+  "acceptance": "approve and reject require --subject for G6 and G7 and leave gate state unchanged when it is omitted; gate next skips G1.5 only while the optional gate is untouched and pending, surfaces an explicit G1.5 rejection, and derives G6/G7 readiness from subject-scoped decisions for every epic in the current release rather than stale global slots.",
+  "invariants": [
+    ".throughline/gates.json remains the sole gate-state source of truth",
+    "One epic's decision never authorizes another epic",
+    "Failed CLI validation never partially mutates gate state",
+    "Bare checks and mutations remain valid for non-subject gates"
+  ],
+  "prd_ref": "REQ-08"
+}

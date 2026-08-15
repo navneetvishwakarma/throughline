@@ -1,0 +1,32 @@
+{
+  "id": "S-18",
+  "title": "Make coverage result pass state honor non-blocking modes",
+  "goal": "Make coverage JSON carry the same non-blocking off and warn semantics already promised by the schema and CLI exit contract.",
+  "in_scope": [
+    "Compute passed as true in off and warn modes for successful below-threshold stack results",
+    "Compute passed as true in off and warn modes for errored stack results while preserving status and diagnostics",
+    "Apply the mode rule to fresh results, --reuse per-stack reevaluation, and aggregate summary.passed",
+    "Preserve threshold and error blocking in enforce mode",
+    "Update both scripts/coverage.mjs and skills/bootstrap-project/assets/scripts/coverage.mjs",
+    "Regression-test that rendered CI can continue trusting summary.passed as the single source of truth"
+  ],
+  "out_of_scope": [
+    "Suppressing coverage error or below-threshold reporting in off or warn mode",
+    "Automatically overwriting seed-only workflows in already-adopted projects",
+    "Changing the render-workflow TAIL unless tests prove a defensive mode guard is still required",
+    "Backporting the fix into downstream repositories during this story"
+  ],
+  "acceptance": "coverage.mjs --json reports passed: true for off and warn modes even when an ok stack is below threshold or a stack errors, while enforce mode preserves the real threshold and error outcome; the same rule governs fresh per-stack results, --reuse reevaluation, and the aggregate summary in both the self-hosted and shipped scaffold copies, so rendered CI may trust summary.passed without turning a reporting mode into a blocking gate.",
+  "invariants": [
+    "status and diagnostic details remain truthful even when passed is non-blocking",
+    "Enforce mode remains fail-closed for errors and below-threshold coverage",
+    "The CLI exit code and serialized passed field express the same mode contract",
+    "Existing downstream workflows remain project-owned and require explicit manual rerender or targeted force after upgrade"
+  ],
+  "prd_ref": [
+    "REQ-02",
+    "REQ-03",
+    "REQ-04",
+    "REQ-11"
+  ]
+}

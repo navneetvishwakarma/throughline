@@ -63,6 +63,42 @@ All automated regressions go in `tests/throughline.test.mjs`. They exercise copi
 - Installer regression: Claude, Codex, and Antigravity installer dry runs continue to exit zero under the supported runtime.
 - Manual compatibility check: a strict-engine install under Node 18 or 19 fails at engine validation with the documented supported range rather than reaching an unsupported c8 execution.
 
+## S-15: Lifecycle-aware release traceability
+
+- Legacy-grace integration: stamp `legacyContractGrace: true`, leave a historical story without `prd_ref`, and assert the related requirement-to-story rollup emits a warning and exits zero.
+- Strict regression: run the same fixture without grace and assert the missing story traceability remains a hard failure.
+- Contract regression: with grace active, a story or epic that explicitly names nonexistent `REQ-999` still fails.
+- Define-flow integration: add approved v2 requirements to the PRD while the backlog contains only v1 epics and assert validation passes.
+- Activation integration: add the first v2 epic and assert every v2 PRD requirement must now be referenced by a v2 epic and story.
+- Parity regression: run the same fixtures against the self-hosted and bootstrap scaffold validator copies.
+
+## S-16: CRLF-safe managed-hook recognition
+
+- Windows regression: install a known historical Throughline hook with CRLF, run `sync-plugin.mjs --apply`, and assert it is recognized and refreshed to the current fail-fast managed hook.
+- Enforcement regression: execute the refreshed hook with a failing `ensure-branch --check-only` followed by a validator that would succeed, and assert the hook exits non-zero before validation can mask the failure.
+- Ownership regression: add `npm run lint` to a hook containing both Throughline commands, run sync, and assert the hook remains byte-for-byte unchanged and is reported for manual composition.
+- Line-ending matrix: repeat exact managed-hook recognition with LF and CRLF content.
+- Parity regression: assert the self-hosted and bootstrap scaffold sync-plugin copies produce the same ownership decision.
+
+## S-17: Subject-aware gate mutation and progression
+
+- Mutation integration: `approve G6`, `reject G6`, `approve G7`, and `reject G7` without `--subject` each exit non-zero, name the missing argument, and leave `.throughline/gates.json` byte-for-byte unchanged.
+- Positive mutation: the same commands with `--subject E-2` update only the E-2 subject entry.
+- Optional-gate regression: untouched pending G1.5 is skipped by `next`, but explicitly rejected G1.5 is returned as the next unresolved gate.
+- Scoped progression: with two current-release epics and a stale approved global G6/G7 slot, `next` reports the first epic missing its scoped G6 or G7 decision.
+- Completion regression: `next` advances past G6/G7 only after every current-release epic has the applicable scoped approval.
+- Parity regression: run the same fixtures against the self-hosted and bootstrap scaffold gate copies.
+
+## S-18: Mode-aware coverage pass state
+
+- Below-threshold matrix: for an otherwise successful stack below `coverage.min`, assert JSON `passed` is true in `warn` and `off`, and false in `enforce`.
+- Error matrix: for a stack command or report error, assert JSON preserves `status: error` and diagnostics while `passed` is true in `warn` and `off`, and false in `enforce`.
+- Reuse regression: reevaluate a stored below-threshold or error result with `--reuse` and assert every per-stack `passed` value follows the current resolved mode.
+- Aggregate regression: assert `summary.passed` follows non-blocking mode even when a result failed or aggregate coverage is below threshold; enforce mode continues to fail closed.
+- CI contract: render the workflow and prove its `process.exit(s.passed ? 0 : 1)` consumer stays non-blocking for warn/off summaries without requiring a duplicate template policy check.
+- Copy parity: assert `scripts/coverage.mjs` and `skills/bootstrap-project/assets/scripts/coverage.mjs` remain byte-identical after the fix.
+- Downstream boundary: assert sync remains seed-only and documents that existing adopted workflows require an explicit targeted force or manual rerender after upgrading.
+
 ## Epic verification
 
 - `node scripts/validate.mjs`
@@ -74,4 +110,4 @@ All automated regressions go in `tests/throughline.test.mjs`. They exercise copi
 - `node install.mjs claude --dry-run`
 - `node install.mjs codex --dry-run`
 - `node install.mjs antigravity --dry-run`
-- `node scripts/gate.mjs check G6 --subject E-2` before implementation; this remains pending until the user approves this plan.
+- `node scripts/gate.mjs check G6 --subject E-2` before implementation; the expanded S-15 through S-18 plan is approved under the user's standing approval.

@@ -4,7 +4,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, r
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const assetsRoot = join(repoRoot, 'skills/bootstrap-project/assets');
@@ -457,6 +457,46 @@ test('gate script scopes approval to a subject so a stale global approval from o
   }
 });
 
+test('gate script requires --subject for approve/reject of G6 and G7, and never partially mutates gate state when it is omitted', () => {
+  const root = makeProject('gate-subject-mutation-guard');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const gatesPath = join(root, '.throughline/gates.json');
+
+    // No gates.json yet -- an unscoped mutation of a subject gate must not create one.
+    assert.equal(existsSync(gatesPath), false);
+    const approveNoSubject = runNode(root, gateScript, ['approve', 'G6']);
+    assert.equal(approveNoSubject.status, 2);
+    assert.match(approveNoSubject.stderr, /G6 requires --subject <id> because approval is recorded per subject/);
+    assert.equal(existsSync(gatesPath), false);
+
+    const rejectNoSubject = runNode(root, gateScript, ['reject', 'G7']);
+    assert.equal(rejectNoSubject.status, 2);
+    assert.match(rejectNoSubject.stderr, /G7 requires --subject <id> because approval is recorded per subject/);
+    assert.equal(existsSync(gatesPath), false);
+
+    // A bare mutation of a non-subject gate still works and creates the file.
+    const approveG5 = runNode(root, gateScript, ['approve', 'G5', '--note', 'backlog reviewed']);
+    assert.equal(approveG5.status, 0, approveG5.stderr || approveG5.stdout);
+    const afterG5 = readFileSync(gatesPath, 'utf8');
+
+    // Now that gates.json exists, an unscoped G6/G7 mutation must leave it byte-unchanged.
+    const approveNoSubjectAgain = runNode(root, gateScript, ['approve', 'G6']);
+    assert.equal(approveNoSubjectAgain.status, 2);
+    assert.equal(readFileSync(gatesPath, 'utf8'), afterG5);
+
+    const rejectNoSubjectAgain = runNode(root, gateScript, ['reject', 'G7']);
+    assert.equal(rejectNoSubjectAgain.status, 2);
+    assert.equal(readFileSync(gatesPath, 'utf8'), afterG5);
+
+    // Subject-scoped mutation of G6/G7 still works.
+    const approveWithSubject = runNode(root, gateScript, ['approve', 'G6', '--subject', 'E-1', '--note', 'plan approved']);
+    assert.equal(approveWithSubject.status, 0, approveWithSubject.stderr || approveWithSubject.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate.mjs rejects an epic prd_ref absent from the approved PRD', () => {
   const root = makeProject('dangling-epic-prd-ref');
   try {
@@ -536,7 +576,7 @@ test('validate.mjs reads a requirement release from the final table cell', () =>
   }
 });
 
-test('validate.mjs requires every release requirement in a same-release epic and story', () => {
+test('validate.mjs leaves an unrepresented future release unenforced, then activates full epic/story coverage checks once the first epic for that release exists', () => {
   const root = makeProject('prd-release-traceability');
   try {
     writeApprovedPrd(root, [
@@ -544,6 +584,24 @@ test('validate.mjs requires every release requirement in a same-release epic and
       { id: 'REQ-02', release: 'v2' },
     ]);
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ release_in_flight: 'v1' }));
+
+    // No v2 epic yet -- REQ-02 (v2) is not represented in the backlog, so it must not invalidate it.
+    const unrepresented = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(unrepresented.status, 0, unrepresented.stderr || unrepresented.stdout);
+
+    // First v2 epic exists but doesn't reference REQ-02 -- activation: now it must hard-fail.
+    const epicsMissingRef = [
+      { id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' },
+      { id: 'E-2', title: 'Second release', order: 1, release: 'v2' },
+    ];
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics: epicsMissingRef,
+      stories: [
+        ...baseBacklog().stories,
+        { id: 'S-2', title: 'Second release placeholder', epic: 'E-2', prd_ref: 'REQ-01', acceptance: 'The work ships.', blocked_by: [], status: 'notstarted', order: 1 },
+      ],
+    }));
 
     const missingEpic = runNode(root, join(root, 'scripts/validate.mjs'));
     assert.notEqual(missingEpic.status, 0);
@@ -582,6 +640,78 @@ test('validate.mjs requires every release requirement in a same-release epic and
   }
 });
 
+test('validate.mjs downgrades a represented release story-coverage gap to WARN under legacyContractGrace only when a legacy story without prd_ref sits under the release epic, hard-failing the same data without grace', () => {
+  const root = makeProject('release-traceability-legacy-grace');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    const epics = [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' }];
+    // A legacy story with no prd_ref sits under E-1's release epic, but nothing traces REQ-01 to a story.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        { id: 'S-1', title: 'Old story, no trace', epic: 'E-1', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 },
+      ],
+    }));
+
+    const withoutGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withoutGrace.status, 0);
+    assert.match(withoutGrace.stderr, /REQ-01 \(release v1\) is not referenced by any story in its release epic/);
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(withGrace.status, 0, withGrace.stderr || withGrace.stdout);
+    assert.match(withGrace.stdout, /REQ-01 \(release v1\) is not referenced by any story in its release epic/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs never downgrades a release story-coverage gap under legacyContractGrace when no story without prd_ref exists in the release epic (a genuine gap, not a legacy backfill)', () => {
+  const root = makeProject('release-traceability-legacy-grace-no-candidate');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }, { id: 'REQ-02', release: 'v1' }]);
+    const epics = [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: ['REQ-01', 'REQ-02'], release: 'v1' }];
+    // Every story under E-1 has a prd_ref -- none is a plausible legacy story for REQ-02.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics,
+      stories: [
+        { id: 'S-1', title: 'Traced', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 },
+      ],
+    }));
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withGrace.status, 0);
+    assert.match(withGrace.stderr, /REQ-02 \(release v1\) is not referenced by any story in its release epic/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs hard-fails a dangling prd_ref regardless of legacyContractGrace', () => {
+  const root = makeProject('release-traceability-dangling-ref-grace');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-999', release: 'v1' }],
+      stories: [{ id: 'S-1', title: 'Bad ref', epic: 'E-1', prd_ref: 'REQ-999', acceptance: 'It works.', blocked_by: [], status: 'notstarted', order: 0 }],
+    }));
+
+    const withoutGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withoutGrace.status, 0);
+    assert.match(withoutGrace.stderr, /prd_ref 'REQ-999' does not exist in the approved PRD/);
+
+    writeJson(join(root, '.throughline/plugin-version.json'), { version: null, syncedAt: new Date().toISOString(), pendingReview: [], legacyContractGrace: true });
+    const withGrace = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(withGrace.status, 0);
+    assert.match(withGrace.stderr, /prd_ref 'REQ-999' does not exist in the approved PRD/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('gate script next skips optional G1.5 while keeping it visible in list', () => {
   const root = makeProject('gate-next-optional');
   try {
@@ -595,6 +725,108 @@ test('gate script next skips optional G1.5 while keeping it visible in list', ()
 
     const list = runNode(root, gateScript, ['list']);
     assert.match(list.stdout, /G1\.5: pending/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate script next surfaces an explicit G1.5 rejection instead of silently skipping it', () => {
+  const root = makeProject('gate-next-g1-5-rejected');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const approveG1 = runNode(root, gateScript, ['approve', 'G1', '--note', 'brief approved']);
+    assert.equal(approveG1.status, 0, approveG1.stderr || approveG1.stdout);
+
+    const rejectG1_5 = runNode(root, gateScript, ['reject', 'G1.5', '--note', 'assumption invalidated']);
+    assert.equal(rejectG1_5.status, 1, rejectG1_5.stderr || rejectG1_5.stdout);
+
+    const next = runNode(root, gateScript, ['next']);
+    assert.equal(next.status, 0, next.stderr || next.stdout);
+    assert.match(next.stdout, /G1\.5 rejected/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate script next derives G6/G7 readiness from subject-scoped decisions across every epic in release_in_flight, ignoring stale global slots', () => {
+  const root = makeProject('gate-next-subject-scoped');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const gatesPath = join(root, '.throughline/gates.json');
+    for (const gate of ['G1', 'G2', 'G3', 'G4', 'G5']) {
+      const approve = runNode(root, gateScript, ['approve', gate, '--note', gate + ' approved']);
+      assert.equal(approve.status, 0, approve.stderr || approve.stdout);
+    }
+
+    // No epics in the release yet: G6/G7 are vacuously satisfied, next moves on to G8.
+    const zeroEpics = runNode(root, gateScript, ['next']);
+    assert.equal(zeroEpics.status, 0, zeroEpics.stderr || zeroEpics.stdout);
+    assert.match(zeroEpics.stdout, /G8 pending/);
+
+    // One epic in the release. Stale global G6 status is 'approved' but no subject decision
+    // exists for E-1 -- next must still block on G6, not trust the global slot.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' }],
+    }));
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { status: 'approved', subjects: {} },
+      },
+    });
+    const staleGlobalApproved = runNode(root, gateScript, ['next']);
+    assert.equal(staleGlobalApproved.status, 0, staleGlobalApproved.stderr || staleGlobalApproved.stdout);
+    assert.match(staleGlobalApproved.stdout, /G6 pending/);
+
+    // Inverse: global status is stale/wrong ('rejected'), but E-1's subject decision is approved --
+    // next must not block on G6 because of the stale global field.
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { status: 'rejected', subjects: { 'E-1': { status: 'approved' } } },
+      },
+    });
+    const staleGlobalRejected = runNode(root, gateScript, ['next']);
+    assert.equal(staleGlobalRejected.status, 0, staleGlobalRejected.stderr || staleGlobalRejected.stdout);
+    assert.match(staleGlobalRejected.stdout, /G7 pending/);
+
+    // Two epics in the release, mirroring this repo's real state: one epic's subject decision is
+    // approved, the other's is rejected. next must report the subject gate as pending, not pass
+    // because a stale global slot happens to read 'approved'.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics: [
+        { id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' },
+        { id: 'E-2', title: 'Second epic', order: 1, prd_ref: 'REQ-01', release: 'v1' },
+      ],
+    }));
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { status: 'approved', subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'approved' } } },
+        G7: { status: 'approved', subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'rejected' } } },
+      },
+    });
+    const mixedDecisions = runNode(root, gateScript, ['next']);
+    assert.equal(mixedDecisions.status, 0, mixedDecisions.stderr || mixedDecisions.stdout);
+    assert.match(mixedDecisions.stdout, /G7 pending/);
+
+    // Every current-release epic has an approved subject decision for both gates -- next clears them.
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'approved' } } },
+        G7: { subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'approved' } } },
+      },
+    });
+    const allApproved = runNode(root, gateScript, ['next']);
+    assert.equal(allApproved.status, 0, allApproved.stderr || allApproved.stdout);
+    assert.match(allApproved.stdout, /G8 pending/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1077,6 +1309,143 @@ test('coverage.mjs treats mode off and warn as non-blocking only when spelled co
     writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'Off', min: 0.99, command: 'node write-coverage.mjs' } }));
     const wrongCase = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check']);
     assert.equal(wrongCase.status, 2, wrongCase.stderr || wrongCase.stdout, 'a mode typo must never silently behave like off');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports a below-threshold stack as passed:true in off mode', () => {
+  const root = makeProject('coverage-mode-off-stack-passed');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'off', min: 0.99, command: 'node write-coverage.mjs' } }));
+
+    const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stacks[0].status, 'ok');
+    assert.equal(summary.stacks[0].pct, 0.01, 'the real below-threshold pct must still be reported truthfully');
+    assert.equal(summary.stacks[0].passed, true, 'off mode must not let a below-threshold stack report passed:false');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports summary.passed true in off and warn mode when aggregate is below threshold, including after --reuse', () => {
+  const root = makeProject('coverage-mode-nonblocking-aggregate');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'off', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const off = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(off.status, 0, off.stderr || off.stdout);
+    assert.equal(JSON.parse(off.stdout).passed, true);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const warn = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(warn.status, 0, warn.stderr || warn.stdout);
+    assert.equal(JSON.parse(warn.stdout).passed, true);
+
+    // Write a real below-threshold summary under enforce, then reuse it after switching to warn.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforce', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const enforceRun = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+    assert.equal(JSON.parse(enforceRun.stdout).passed, false, 'sanity: enforce mode must still fail this fixture');
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'warn', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const reused = runNode(root, join(root, 'scripts/coverage.mjs'), ['--reuse', '--json']);
+    assert.equal(reused.status, 0, reused.stderr || reused.stdout);
+    const reusedSummary = JSON.parse(reused.stdout);
+    assert.equal(reusedSummary.stacks[0].pct, 0.01, 'reevaluate must keep reporting the real pct');
+    assert.equal(reusedSummary.stacks[0].passed, true);
+    assert.equal(reusedSummary.passed, true, '--reuse aggregate must also honor the current non-blocking mode');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs reports passed:true for an errored stack in off and warn mode while preserving status and diagnostics', () => {
+  const root = makeProject('coverage-mode-nonblocking-error');
+  try {
+    approvePrd(root);
+
+    for (const mode of ['off', 'warn']) {
+      writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+        coverage: { mode, min: 0.9, command: 'node -e "process.exit(1)"' },
+      }));
+      const result = runNode(root, join(root, 'scripts/coverage.mjs'), ['--json']);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.status, 'error', 'mode=' + mode);
+      assert.equal(summary.stacks[0].status, 'error', 'mode=' + mode);
+      assert.ok(summary.stacks[0].message, 'mode=' + mode + ': error message must not be suppressed');
+      assert.equal(summary.stacks[0].passed, true, 'mode=' + mode);
+      assert.equal(summary.passed, true, 'mode=' + mode + ': an error must not become a blocking failure in a non-blocking mode');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('coverage.mjs enforce mode still reports passed:false and exits non-zero for both below-threshold and errored stacks', () => {
+  const root = makeProject('coverage-mode-enforce-still-blocks');
+  try {
+    writeFileSync(join(root, 'write-coverage.mjs'), `
+      import { mkdirSync, writeFileSync } from 'node:fs';
+      mkdirSync('coverage', { recursive: true });
+      writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 100, covered: 1 } } }));
+    `, 'utf8');
+    approvePrd(root);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforce', min: 0.99, command: 'node write-coverage.mjs' } }));
+    const belowThreshold = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(belowThreshold.status, 0, belowThreshold.stderr || belowThreshold.stdout);
+    const belowThresholdSummary = JSON.parse(belowThreshold.stdout);
+    assert.equal(belowThresholdSummary.stacks[0].passed, false);
+    assert.equal(belowThresholdSummary.passed, false);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ coverage: { mode: 'enforce', min: 0.9, command: 'node -e "process.exit(1)"' } }));
+    const errored = runNode(root, join(root, 'scripts/coverage.mjs'), ['--check', '--json']);
+    assert.notEqual(errored.status, 0, errored.stderr || errored.stdout);
+    const erroredSummary = JSON.parse(errored.stdout);
+    assert.equal(erroredSummary.stacks[0].passed, false);
+    assert.equal(erroredSummary.passed, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rendered CI TAIL treats a non-blocking-mode coverage result as passing', async () => {
+  const root = makeProject('coverage-ci-tail-nonblocking');
+  try {
+    const { renderWorkflow } = await import(pathToFileURL(join(repoRoot, 'scripts/lib/render-workflow.mjs')).href);
+    const rendered = renderWorkflow(root);
+    const match = rendered.match(/node -e "\r?\n([\s\S]*?)\r?\n\s*"\r?\n\s*- uses: actions\/upload-artifact/);
+    assert.ok(match, 'could not locate the embedded coverage-evaluation node -e script in the rendered workflow TAIL');
+    const script = match[1];
+
+    // The extracted script hardcodes /tmp/coverage-summary.json -- point it at a fixture
+    // instead of relying on that path resolving usefully cross-platform.
+    const fixturePath = join(root, 'ci-tail-fixture.json').replace(/\\/g, '/');
+    const pointedScript = script.replaceAll('/tmp/coverage-summary.json', fixturePath);
+
+    // Shape coverage.mjs now actually produces for an off/warn-mode below-threshold run.
+    writeJson(join(root, 'ci-tail-fixture.json'), {
+      status: 'ok', passed: true, aggregate: { pct: 0.01 },
+      stacks: [{ stack: 'node-test', status: 'ok', pct: 0.01, passed: true }],
+    });
+
+    const run = spawnSync(process.execPath, ['-e', pointedScript], { cwd: root, encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1864,6 +2233,97 @@ test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook',
     const hookPath = join(root, '.git/hooks/pre-commit');
     mkdirSync(dirname(hookPath), { recursive: true });
     writeFileSync(hookPath, '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n', 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook saved with CRLF line endings', () => {
+  const root = makeProject('sync-managed-hook-crlf');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfHistoricalHook = '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfHistoricalHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), readFileSync(join(root, '.githooks/pre-commit'), 'utf8'));
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sync-plugin.mjs does not let CRLF normalization turn a composed hook into ownership', () => {
+  const root = makeProject('sync-composed-hook-crlf');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfComposedHook = '#!/bin/sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\nnpm run lint\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfComposedHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), crlfComposedHook, 'a composed hook must remain byte-identical even when it happens to be CRLF-saved');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a CRLF-recognized refreshed pre-commit hook still fails fast and rejects a commit on main', () => {
+  const root = makeProject('pre-commit-crlf-backstop');
+  try {
+    initGitWithCommit(root);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfHistoricalHook = '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfHistoricalHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.match(apply.stdout, /pre-commit \(refreshed from \.githooks\/pre-commit\)/);
+    try { chmodSync(hookPath, 0o755); } catch {}
+
+    writeFileSync(join(root, 'change.txt'), 'change\n', 'utf8');
+    spawnSync('git', ['add', 'change.txt'], { cwd: root, encoding: 'utf8' });
+    const blocked = spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'change on main'], { cwd: root, encoding: 'utf8' });
+    assert.notEqual(blocked.status, 0, 'a refreshed CRLF-recognized hook must still reject a commit on main, not mask the branch check');
+    assert.match(blocked.stderr + blocked.stdout, /never commits directly to main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('scripts/sync-plugin.mjs and the bootstrap scaffold copy normalize CRLF historical hooks identically', () => {
+  const root = makeProject('sync-managed-hook-crlf-parity');
+  try {
+    assert.equal(
+      readFileSync(join(repoRoot, 'scripts/sync-plugin.mjs'), 'utf8'),
+      readFileSync(join(assetsRoot, 'scripts/sync-plugin.mjs'), 'utf8'),
+      'scripts/sync-plugin.mjs and the bootstrap scaffold copy must stay byte-identical'
+    );
+
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    // Overwrite the fixture's bundled copy (normally sourced from assetsRoot) with the
+    // real top-level scripts/sync-plugin.mjs, so this test exercises that file directly
+    // instead of the assets copy every other test in this file runs against.
+    copyFileSync(join(repoRoot, 'scripts/sync-plugin.mjs'), join(root, 'scripts/sync-plugin.mjs'));
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfHistoricalHook = '#!/usr/bin/env sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\n# Throughline 0.2 hook\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfHistoricalHook, 'utf8');
 
     const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
@@ -2698,6 +3158,321 @@ test('check-docs.mjs blanket mode does not enforce a tier until its own doc has 
     const blanketAfterApproval = runNode(root, join(root, 'scripts/check-docs.mjs'), ['--json']);
     assert.equal(blanketAfterApproval.status, 1);
     assert.ok(JSON.parse(blanketAfterApproval.stdout).errors.some((e) => e.includes('missing Acceptance')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate.mjs accepts a versioning block and epics[].breaking, and rejects malformed versioning', () => {
+  const root = makeProject('versioning-valid');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { scheme: 'semver', bump: 'epic-driven', current: '1.0.0' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', breaking: true }],
+    }));
+    const ok = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'not-a-real-mode' },
+    }));
+    const badBump = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badBump.status, 0);
+    assert.match(badBump.stderr, /versioning\.bump must be one of/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { current: 'not-semver' },
+    }));
+    const badCurrent = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badCurrent.status, 0);
+    assert.match(badCurrent.stderr, /versioning\.current must be a semver string/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { targets: [{ path: '../outside.json', kind: 'json', jsonPath: 'version' }] },
+    }));
+    const badTarget = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badTarget.status, 0);
+    assert.match(badTarget.stderr, /must not resolve outside the repo/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', breaking: 'yes' }],
+    }));
+    const badBreaking = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(badBreaking.status, 0);
+    assert.match(badBreaking.stderr, /breaking must be a boolean/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs manual mode: report-only writes nothing, --apply without --set fails, --set --apply writes package.json + versioning.current', () => {
+  const root = makeProject('bump-version-manual');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { scheme: 'semver', bump: 'manual', current: '1.0.0' },
+    }));
+
+    const report = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(report.status, 0, report.stderr || report.stdout);
+    assert.match(report.stdout, /report only: no files were written/);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '1.0.0');
+
+    const applyNoSet = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--apply']);
+    assert.equal(applyNoSet.status, 2, applyNoSet.stderr || applyNoSet.stdout);
+    assert.match(applyNoSet.stderr, /pass --set=X\.Y\.Z/);
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.1.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '1.1.0');
+    const backlogAfter = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    assert.equal(backlogAfter.versioning.current, '1.1.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs refuses to apply a version that is not strictly greater than the current one', () => {
+  const root = makeProject('bump-version-non-increasing');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '2.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ versioning: { bump: 'manual' } }));
+
+    const same = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=2.0.0', '--apply']);
+    assert.equal(same.status, 2);
+    assert.match(same.stderr, /is not greater than the current version/);
+
+    const lower = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.9.9', '--apply']);
+    assert.equal(lower.status, 2);
+    assert.match(lower.stderr, /is not greater than the current version/);
+
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '2.0.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs --apply propagates the resolved version to versioning.targets (json and text kinds)', () => {
+  const root = makeProject('bump-version-targets');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeJson(join(root, '.claude-plugin', 'plugin.json'), { name: 'fixture', version: '0.1.0' });
+    writeFileSync(join(root, 'README.md'), '# Fixture\n\n- Version: `0.1.0`\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        targets: [
+          { path: '.claude-plugin/plugin.json', kind: 'json', jsonPath: 'version' },
+          { path: 'README.md', kind: 'text', pattern: '- Version: `([0-9]+\\.[0-9]+\\.[0-9]+)`' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8')).version, '0.2.0');
+    assert.match(readFileSync(join(root, 'README.md'), 'utf8'), /Version: `0\.2\.0`/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs epic-driven mode suggests major when release_in_flight carries a breaking epic, minor otherwise', () => {
+  const root = makeProject('bump-version-epic-driven');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'epic-driven' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1', breaking: true }],
+    }));
+    const major = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(major.status, 0, major.stderr || major.stdout);
+    assert.match(major.stdout, /suggested: 2\.0\.0/);
+
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'epic-driven' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1' }],
+    }));
+    const minor = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(minor.status, 0, minor.stderr || minor.stdout);
+    assert.match(minor.stdout, /suggested: 1\.1\.0/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs --apply preserves CRLF line endings instead of rewriting the whole file as LF', () => {
+  const root = makeProject('bump-version-crlf');
+  try {
+    writeFileSync(join(root, 'package.json'), '{\r\n  "name": "fixture",\r\n  "version": "1.0.0"\r\n}\r\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ versioning: { bump: 'manual' } }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.1.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+
+    const raw = readFileSync(join(root, 'package.json'), 'utf8');
+    assert.match(raw, /"version": "1\.1\.0"/);
+    assert.equal(/(?<!\r)\n/.test(raw), false, 'expected every line ending to stay CRLF, not be rewritten as bare LF');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs text targets replace only the captured span, not the first occurrence of the value anywhere in the match', () => {
+  const root = makeProject('bump-version-text-offset');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeFileSync(join(root, 'CHANGELOG.md'), 'AS OF 0.1.0, version: 0.1.0\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        targets: [
+          { path: 'CHANGELOG.md', kind: 'text', pattern: 'AS OF [0-9]+\\.[0-9]+\\.[0-9]+, version: ([0-9]+\\.[0-9]+\\.[0-9]+)' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), 'AS OF 0.1.0, version: 0.2.0\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs text targets reject a pattern with more than one capture group instead of silently no-opping', () => {
+  const root = makeProject('bump-version-text-multigroup');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeFileSync(join(root, 'VERSION.md'), 'Version: 0.1.0\n', 'utf8');
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        targets: [
+          { path: 'VERSION.md', kind: 'text', pattern: 'Version:\\s*(x)?([0-9]+\\.[0-9]+\\.[0-9]+)' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 2, applied.stderr || applied.stdout);
+    assert.match(applied.stderr, /exactly one capture group/);
+    assert.equal(readFileSync(join(root, 'VERSION.md'), 'utf8'), 'Version: 0.1.0\n');
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '0.1.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs --apply writes nothing when a versioning.targets entry is invalid, even though package.json and backlog.json would otherwise be updated', () => {
+  const root = makeProject('bump-version-partial-write');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '0.1.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: {
+        bump: 'manual',
+        current: '0.1.0',
+        targets: [
+          { path: 'MISSING.md', kind: 'text', pattern: '([0-9]+\\.[0-9]+\\.[0-9]+)' },
+        ],
+      },
+    }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=0.2.0', '--apply']);
+    assert.equal(applied.status, 2, applied.stderr || applied.stdout);
+    assert.match(applied.stderr, /MISSING\.md.*does not exist/);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '0.1.0');
+    assert.equal(JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8')).versioning.current, '0.1.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs allows promoting a prerelease to its final release', () => {
+  const root = makeProject('bump-version-prerelease');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0-rc.1' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({ versioning: { bump: 'manual' } }));
+
+    const applied = runNode(root, join(root, 'scripts/bump-version.mjs'), ['--set=1.0.0', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '1.0.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs fails loud when backlog.json exists but fails to parse, instead of treating it as unmanaged', () => {
+  const root = makeProject('bump-version-corrupt-backlog');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeFileSync(join(root, 'docs/engineering/backlog.json'), '{ this is not valid json', 'utf8');
+
+    const report = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(report.status, 2, report.stderr || report.stdout);
+    assert.match(report.stderr, /backlog\.json exists but could not be parsed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bump-version.mjs epic-driven mode stops suggesting major once the breaking epic is fully shipped', () => {
+  const root = makeProject('bump-version-epic-shipped');
+  try {
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.0.0' });
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { bump: 'epic-driven' },
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, vertical: false, prd_ref: 'REQ-01', release: 'v1', breaking: true }],
+      stories: [{
+        id: 'S-1', title: 'Create shell', epic: 'E-1', prd_ref: 'REQ-01', acceptance: 'The app shell renders.', blocked_by: [], status: 'done', order: 0,
+      }],
+    }));
+
+    const suggestion = runNode(root, join(root, 'scripts/bump-version.mjs'));
+    assert.equal(suggestion.status, 0, suggestion.stderr || suggestion.stdout);
+    assert.match(suggestion.stdout, /suggested: 1\.1\.0/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("validate.mjs flags versioning.current drift from package.json's real version", () => {
+  const root = makeProject('versioning-drift');
+  try {
+    writeApprovedPrd(root, [{ id: 'REQ-01', release: 'v1' }]);
+    writeJson(join(root, 'package.json'), { name: 'fixture', version: '1.2.0' });
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      versioning: { scheme: 'semver', bump: 'manual', current: '1.0.0' },
+    }));
+
+    const result = runNode(root, join(root, 'scripts/validate.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /versioning\.current .*does not match package\.json version/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('init-project.mjs materializes docs/engineering/tech-debt.md from the template', () => {
+  const root = makeProject('tech-debt-scaffold');
+  try {
+    const content = readFileSync(join(root, 'docs/engineering/tech-debt.md'), 'utf8');
+    assert.match(content, /Technical & Architecture Debt Register/);
+    assert.match(content, /## Open/);
+    assert.match(content, /## Promoted/);
+    assert.match(content, /## Resolved/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

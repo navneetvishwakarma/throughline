@@ -1,0 +1,28 @@
+{
+  "id": "S-15",
+  "title": "Make release traceability lifecycle-aware and legacy-compatible",
+  "goal": "Preserve strict release traceability without blocking the documented define-product to define-backlog sequence or brownfield legacy-grace migrations.",
+  "in_scope": [
+    "Apply release completeness rollups only to releases already represented by at least one backlog epic",
+    "Begin full epic and story coverage enforcement as soon as a release is represented in the backlog",
+    "Downgrade legacy-attributable requirement rollup gaps to warnings while legacyContractGrace is active",
+    "Keep invalid or dangling prd_ref values and non-legacy validation failures blocking",
+    "Keep scripts/validate.mjs and the bootstrap scaffold copy behaviorally identical"
+  ],
+  "out_of_scope": [
+    "Automatically creating future-release epics or stories during define-product",
+    "Extending legacy grace to malformed coverage, status, dependency, or identifier contracts",
+    "Changing release_in_flight ownership or advancing it before define-backlog"
+  ],
+  "acceptance": "validate.mjs treats release traceability completeness as mandatory only after that release is represented in the backlog, so define-product may add future-release PRD requirements before define-backlog creates their epics; once represented, every requirement for that release must resolve through an epic and story, except that legacyContractGrace downgrades rollup gaps caused by historical stories without prd_ref to warnings while dangling references and all non-legacy contract errors still fail.",
+  "invariants": [
+    "An unrepresented future PRD release does not invalidate the current backlog",
+    "Adding the first epic for a release activates completeness checks for that release",
+    "Legacy grace never authorizes invented requirement identifiers or malformed contract data",
+    "Current release traceability remains complete and mechanically verifiable"
+  ],
+  "prd_ref": [
+    "REQ-08",
+    "REQ-09"
+  ]
+}
