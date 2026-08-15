@@ -92,6 +92,10 @@ if (cmd === 'check') {
 }
 
 if (cmd === 'approve' || cmd === 'reject') {
+  if (subjectGates.has(rawGate) && !subject) {
+    console.error(rawGate + ' requires --subject <id> because approval is recorded per subject');
+    process.exit(2);
+  }
   const status = cmd === 'approve' ? 'approved' : 'rejected';
   const entry = { status, note: noteFrom(rest), updatedAt: new Date().toISOString() };
   data.gates[rawGate] = { ...(data.gates[rawGate] || {}), ...entry, subjects: data.gates[rawGate]?.subjects };

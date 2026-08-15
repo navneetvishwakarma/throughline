@@ -457,6 +457,46 @@ test('gate script scopes approval to a subject so a stale global approval from o
   }
 });
 
+test('gate script requires --subject for approve/reject of G6 and G7, and never partially mutates gate state when it is omitted', () => {
+  const root = makeProject('gate-subject-mutation-guard');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const gatesPath = join(root, '.throughline/gates.json');
+
+    // No gates.json yet -- an unscoped mutation of a subject gate must not create one.
+    assert.equal(existsSync(gatesPath), false);
+    const approveNoSubject = runNode(root, gateScript, ['approve', 'G6']);
+    assert.equal(approveNoSubject.status, 2);
+    assert.match(approveNoSubject.stderr, /G6 requires --subject <id> because approval is recorded per subject/);
+    assert.equal(existsSync(gatesPath), false);
+
+    const rejectNoSubject = runNode(root, gateScript, ['reject', 'G7']);
+    assert.equal(rejectNoSubject.status, 2);
+    assert.match(rejectNoSubject.stderr, /G7 requires --subject <id> because approval is recorded per subject/);
+    assert.equal(existsSync(gatesPath), false);
+
+    // A bare mutation of a non-subject gate still works and creates the file.
+    const approveG5 = runNode(root, gateScript, ['approve', 'G5', '--note', 'backlog reviewed']);
+    assert.equal(approveG5.status, 0, approveG5.stderr || approveG5.stdout);
+    const afterG5 = readFileSync(gatesPath, 'utf8');
+
+    // Now that gates.json exists, an unscoped G6/G7 mutation must leave it byte-unchanged.
+    const approveNoSubjectAgain = runNode(root, gateScript, ['approve', 'G6']);
+    assert.equal(approveNoSubjectAgain.status, 2);
+    assert.equal(readFileSync(gatesPath, 'utf8'), afterG5);
+
+    const rejectNoSubjectAgain = runNode(root, gateScript, ['reject', 'G7']);
+    assert.equal(rejectNoSubjectAgain.status, 2);
+    assert.equal(readFileSync(gatesPath, 'utf8'), afterG5);
+
+    // Subject-scoped mutation of G6/G7 still works.
+    const approveWithSubject = runNode(root, gateScript, ['approve', 'G6', '--subject', 'E-1', '--note', 'plan approved']);
+    assert.equal(approveWithSubject.status, 0, approveWithSubject.stderr || approveWithSubject.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validate.mjs rejects an epic prd_ref absent from the approved PRD', () => {
   const root = makeProject('dangling-epic-prd-ref');
   try {
