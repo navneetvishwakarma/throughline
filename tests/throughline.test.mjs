@@ -730,6 +730,108 @@ test('gate script next skips optional G1.5 while keeping it visible in list', ()
   }
 });
 
+test('gate script next surfaces an explicit G1.5 rejection instead of silently skipping it', () => {
+  const root = makeProject('gate-next-g1-5-rejected');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const approveG1 = runNode(root, gateScript, ['approve', 'G1', '--note', 'brief approved']);
+    assert.equal(approveG1.status, 0, approveG1.stderr || approveG1.stdout);
+
+    const rejectG1_5 = runNode(root, gateScript, ['reject', 'G1.5', '--note', 'assumption invalidated']);
+    assert.equal(rejectG1_5.status, 1, rejectG1_5.stderr || rejectG1_5.stdout);
+
+    const next = runNode(root, gateScript, ['next']);
+    assert.equal(next.status, 0, next.stderr || next.stdout);
+    assert.match(next.stdout, /G1\.5 rejected/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('gate script next derives G6/G7 readiness from subject-scoped decisions across every epic in release_in_flight, ignoring stale global slots', () => {
+  const root = makeProject('gate-next-subject-scoped');
+  try {
+    const gateScript = join(root, 'scripts/gate.mjs');
+    const gatesPath = join(root, '.throughline/gates.json');
+    for (const gate of ['G1', 'G2', 'G3', 'G4', 'G5']) {
+      const approve = runNode(root, gateScript, ['approve', gate, '--note', gate + ' approved']);
+      assert.equal(approve.status, 0, approve.stderr || approve.stdout);
+    }
+
+    // No epics in the release yet: G6/G7 are vacuously satisfied, next moves on to G8.
+    const zeroEpics = runNode(root, gateScript, ['next']);
+    assert.equal(zeroEpics.status, 0, zeroEpics.stderr || zeroEpics.stdout);
+    assert.match(zeroEpics.stdout, /G8 pending/);
+
+    // One epic in the release. Stale global G6 status is 'approved' but no subject decision
+    // exists for E-1 -- next must still block on G6, not trust the global slot.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics: [{ id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' }],
+    }));
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { status: 'approved', subjects: {} },
+      },
+    });
+    const staleGlobalApproved = runNode(root, gateScript, ['next']);
+    assert.equal(staleGlobalApproved.status, 0, staleGlobalApproved.stderr || staleGlobalApproved.stdout);
+    assert.match(staleGlobalApproved.stdout, /G6 pending/);
+
+    // Inverse: global status is stale/wrong ('rejected'), but E-1's subject decision is approved --
+    // next must not block on G6 because of the stale global field.
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { status: 'rejected', subjects: { 'E-1': { status: 'approved' } } },
+      },
+    });
+    const staleGlobalRejected = runNode(root, gateScript, ['next']);
+    assert.equal(staleGlobalRejected.status, 0, staleGlobalRejected.stderr || staleGlobalRejected.stdout);
+    assert.match(staleGlobalRejected.stdout, /G7 pending/);
+
+    // Two epics in the release, mirroring this repo's real state: one epic's subject decision is
+    // approved, the other's is rejected. next must report the subject gate as pending, not pass
+    // because a stale global slot happens to read 'approved'.
+    writeJson(join(root, 'docs/engineering/backlog.json'), baseBacklog({
+      release_in_flight: 'v1',
+      epics: [
+        { id: 'E-1', title: 'Foundation', order: 0, prd_ref: 'REQ-01', release: 'v1' },
+        { id: 'E-2', title: 'Second epic', order: 1, prd_ref: 'REQ-01', release: 'v1' },
+      ],
+    }));
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { status: 'approved', subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'approved' } } },
+        G7: { status: 'approved', subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'rejected' } } },
+      },
+    });
+    const mixedDecisions = runNode(root, gateScript, ['next']);
+    assert.equal(mixedDecisions.status, 0, mixedDecisions.stderr || mixedDecisions.stdout);
+    assert.match(mixedDecisions.stdout, /G7 pending/);
+
+    // Every current-release epic has an approved subject decision for both gates -- next clears them.
+    writeJson(gatesPath, {
+      gates: {
+        G1: { status: 'approved' }, G2: { status: 'approved' }, G3: { status: 'approved' },
+        G4: { status: 'approved' }, G5: { status: 'approved' },
+        G6: { subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'approved' } } },
+        G7: { subjects: { 'E-1': { status: 'approved' }, 'E-2': { status: 'approved' } } },
+      },
+    });
+    const allApproved = runNode(root, gateScript, ['next']);
+    assert.equal(allApproved.status, 0, allApproved.stderr || allApproved.stdout);
+    assert.match(allApproved.stdout, /G8 pending/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('gate script recognizes G9 (measure-learn) alongside the existing gates', () => {
   const root = makeProject('gate-g9');
   try {

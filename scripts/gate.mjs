@@ -47,6 +47,21 @@ function requireGate(gate) {
   }
 }
 
+// G6/G7 run once per epic, so `next` must derive readiness from subject-scoped decisions for
+// every epic in the release actually being worked, never the bare global slot (which is only a
+// convenience rollup for `list` and can be stale from a prior or different epic).
+function currentReleaseEpicIds() {
+  try {
+    const backlog = JSON.parse(readFileSync(join(root, 'docs/engineering/backlog.json'), 'utf8'));
+    const release = backlog.release_in_flight || 'v1';
+    return (backlog.epics || [])
+      .filter((epic) => (epic.release || 'v1') === release)
+      .map((epic) => epic.id);
+  } catch {
+    return [];
+  }
+}
+
 if (!cmd) usage();
 const data = load();
 const subject = subjectFrom(rest);
@@ -63,8 +78,22 @@ if (cmd === 'list') {
 }
 
 if (cmd === 'next') {
-  const next = gates.find((gate) => !optionalGates.has(gate) && data.gates[gate]?.status !== 'approved');
-  console.log(next ? next + ' pending' : 'All gates approved');
+  const epicIds = currentReleaseEpicIds();
+  const blocked = (gate) => {
+    if (optionalGates.has(gate)) return data.gates[gate]?.status === 'rejected';
+    if (subjectGates.has(gate)) {
+      return epicIds.some((id) => data.gates[gate]?.subjects?.[id]?.status !== 'approved');
+    }
+    return data.gates[gate]?.status !== 'approved';
+  };
+  const next = gates.find(blocked);
+  if (!next) {
+    console.log('All gates approved');
+  } else if (optionalGates.has(next)) {
+    console.log(next + ' rejected');
+  } else {
+    console.log(next + ' pending');
+  }
   process.exit(0);
 }
 
