@@ -3,6 +3,7 @@
 // misplaced outside .throughline/. Dependency-free. Exits non-zero on error.
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { SEMVER_RE, VERSIONING_SCHEMES, VERSIONING_BUMPS, checkTargetShape } from './lib/versioning.mjs';
 const root = process.cwd();
 const path = join(root, 'docs/engineering/backlog.json');
 const STATUS = ['notstarted', 'in_progress', 'blocked', 'done'];
@@ -100,6 +101,34 @@ function validateCoverage(coverage) {
 // bug, not a pre-existing-data gap that a grace period is meant to cover.
 validateCoverage(data.coverage);
 
+function validateVersioning(versioning) {
+  if (versioning === undefined) return;
+  if (typeof versioning !== 'object' || versioning === null || Array.isArray(versioning)) { err('versioning must be an object'); return; }
+  if (versioning.scheme !== undefined && !VERSIONING_SCHEMES.includes(versioning.scheme)) err('versioning.scheme must be one of ' + VERSIONING_SCHEMES.join('|') + ' (got ' + JSON.stringify(versioning.scheme) + ')');
+  if (versioning.bump !== undefined && !VERSIONING_BUMPS.includes(versioning.bump)) err('versioning.bump must be one of ' + VERSIONING_BUMPS.join('|') + ' (got ' + JSON.stringify(versioning.bump) + ')');
+  if (versioning.current !== undefined) {
+    if (typeof versioning.current !== 'string' || !SEMVER_RE.test(versioning.current)) {
+      err('versioning.current must be a semver string (got ' + JSON.stringify(versioning.current) + ')');
+    } else {
+      // Catches drift from a version bump applied outside bump-version.mjs --apply (a hand
+      // edit or a plain `npm version`) — versioning.current and package.json's real version
+      // are otherwise never cross-checked, unlike coverage's own record-then-enforce loop.
+      try {
+        const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+        if (typeof pkg.version === 'string' && pkg.version !== versioning.current) {
+          err('versioning.current ' + JSON.stringify(versioning.current) + ' does not match package.json version ' + JSON.stringify(pkg.version) + ' — run `node scripts/bump-version.mjs --set=' + pkg.version + ' --apply`, or fix backlog.json by hand');
+        }
+      } catch { /* package.json missing/unreadable is not this validator's concern */ }
+    }
+  }
+  if (versioning.targets !== undefined) {
+    if (!Array.isArray(versioning.targets)) { err('versioning.targets must be an array'); return; }
+    versioning.targets.forEach((t, i) => checkTargetShape(t, 'versioning.targets[' + i + ']', err));
+  }
+}
+// Same reasoning as validateCoverage: shape is never graced, it's config, not backfillable data.
+validateVersioning(data.versioning);
+
 if (!Array.isArray(data.epics)) err('epics must be an array');
 if (!Array.isArray(data.stories)) err('stories must be an array');
 function parsePrdRequirements(text) {
@@ -155,6 +184,7 @@ const epicIds = new Set();
     else if (prdApproved && !prdRequirements.has(r)) err(at + ": prd_ref '" + r + "' does not exist in the approved PRD");
   });
   if (e.phase && phaseIds.size && !phaseIds.has(e.phase)) err(at + ": phase '" + e.phase + "' not declared in phases[]");
+  if (e.breaking !== undefined && typeof e.breaking !== 'boolean') err(at + ': breaking must be a boolean');
 });
 const ids = new Set();
 (data.stories || []).forEach((s, i) => {
@@ -184,12 +214,20 @@ const ids = new Set();
   }
 });
 if (prdApproved && ((data.epics || []).length || (data.stories || []).length)) {
+  // A future release with no epic yet is not "represented" -- define-product may add its PRD
+  // requirements ahead of define-backlog without invalidating the current backlog. Completeness
+  // activates the instant the first epic for that release exists (epicEffectiveReleases, computed
+  // above from the same e.release || 'v1' convention build-dashboard.mjs uses).
+  const representedReleases = new Set(epicEffectiveReleases);
   for (const [requirementId, release] of prdRequirements) {
+    if (!representedReleases.has(release)) continue;
     const releaseEpics = (data.epics || []).filter((epic) => {
       const refs = Array.isArray(epic.prd_ref) ? epic.prd_ref : epic.prd_ref ? [epic.prd_ref] : [];
       return (epic.release || 'v1') === release && refs.includes(requirementId);
     });
     if (!releaseEpics.length) {
+      // Epic-level gap is never graced -- once a release is represented, every requirement
+      // needs a real epic; legacy grace only covers pre-existing story-level prd_ref gaps.
       err(requirementId + ' (release ' + release + ') is not referenced by any epic in release ' + release);
       continue;
     }
@@ -198,7 +236,17 @@ if (prdApproved && ((data.epics || []).length || (data.stories || []).length)) {
       const refs = Array.isArray(story.prd_ref) ? story.prd_ref : story.prd_ref ? [story.prd_ref] : [];
       return releaseEpicIds.has(story.epic) && refs.includes(requirementId);
     });
-    if (!coveredByStory) err(requirementId + ' (release ' + release + ') is not referenced by any story in its release epic(s)');
+    if (!coveredByStory) {
+      const msg = requirementId + ' (release ' + release + ') is not referenced by any story in its release epic(s)';
+      // Only downgrade when a plausible legacy story (no prd_ref at all) sits under one of this
+      // requirement's release epics -- a genuine gap with no such story stays a hard err even
+      // under grace, since it isn't explained by a historical missing-prd_ref story.
+      const hasLegacyStoryCandidate = (data.stories || []).some((story) => {
+        const refs = Array.isArray(story.prd_ref) ? story.prd_ref : story.prd_ref ? [story.prd_ref] : [];
+        return releaseEpicIds.has(story.epic) && !refs.length;
+      });
+      (legacyContractGrace && hasLegacyStoryCandidate) ? warn(msg) : err(msg);
+    }
   }
 }
 const storyById = new Map((data.stories || []).map((s) => [s.id, s]));
