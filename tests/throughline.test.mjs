@@ -1983,6 +1983,25 @@ test('sync-plugin.mjs refreshes a recognized older Throughline pre-commit hook s
   }
 });
 
+test('sync-plugin.mjs does not let CRLF normalization turn a composed hook into ownership', () => {
+  const root = makeProject('sync-composed-hook-crlf');
+  try {
+    const initGit = spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+    assert.equal(initGit.status, 0, initGit.stderr);
+    const hookPath = join(root, '.git/hooks/pre-commit');
+    mkdirSync(dirname(hookPath), { recursive: true });
+    const crlfComposedHook = '#!/bin/sh\nnode scripts/ensure-branch.mjs --check-only\nnode scripts/validate.mjs\nnpm run lint\n'.replace(/\n/g, '\r\n');
+    writeFileSync(hookPath, crlfComposedHook, 'utf8');
+
+    const apply = runNode(root, join(root, 'scripts/sync-plugin.mjs'), ['--from=' + repoRoot, '--apply']);
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    assert.equal(readFileSync(hookPath, 'utf8'), crlfComposedHook, 'a composed hook must remain byte-identical even when it happens to be CRLF-saved');
+    assert.match(apply.stdout, /pre-commit.*preserved.*manual.*compos|manual.*compos.*pre-commit/is);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('scripts/sync-plugin.mjs and the bootstrap scaffold copy normalize CRLF historical hooks identically', () => {
   const root = makeProject('sync-managed-hook-crlf-parity');
   try {
